@@ -12,7 +12,7 @@ import AdminDashboard from './pages/AdminDashboard.jsx';
 import AdminServices from './pages/AdminServices.jsx';
 import AdminQueue from './pages/AdminQueue.jsx';
 import NotificationPanel from './components/NotificationPanel.jsx';
-import { CREDENTIALS, INIT_SERVICES, INIT_QUEUES, INIT_NOTIFS, HISTORY } from './data/mockData.js';
+import { CREDENTIALS, INIT_SERVICES, INIT_QUEUES, HISTORY, getInitialNotifications } from './data/mockData.js';
 
 const USER_NAV = [
   { id: 'user-dashboard', label: 'Dashboard' },
@@ -32,18 +32,20 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [services, setServices] = useState(INIT_SERVICES);
   const [queues, setQueues] = useState(INIT_QUEUES);
-  const [notifs, setNotifs] = useState(INIT_NOTIFS);
+  const [notifs, setNotifs] = useState(() => getInitialNotifications('user'));
   const [activeQueue, setActiveQueue] = useState(null);
   const [showNotifs, setShowNotifs] = useState(false);
 
   const handleLogin = (authUser) => {
     setUser(authUser);
+    setNotifs(getInitialNotifications(authUser.role));
     setPage(authUser.role === 'admin' ? 'admin-dashboard' : 'user-dashboard');
     setShowNotifs(false);
   };
 
   const handleRegister = (authUser) => {
     setUser(authUser);
+    setNotifs(getInitialNotifications(authUser.role));
     setPage('user-dashboard');
     setShowNotifs(false);
   };

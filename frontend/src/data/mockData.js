@@ -41,9 +41,19 @@ export const HISTORY = [
   { id: 'h6', serviceName: 'Document Processing', date: 'Jun 20, 2026', outcome: 'served', waitMinutes: 6 },
 ];
 
-export const INIT_NOTIFS = [
+const USER_NOTIFS = [
   { id: 'n1', message: 'You are now 3rd in line for General Inquiry.', type: 'info', time: '9:30 AM', read: false },
   { id: 'n2', message: 'General Inquiry wait time updated to 20 min.', type: 'info', time: '9:25 AM', read: false },
   { id: 'n3', message: 'Account Services session completed successfully.', type: 'success', time: 'Jul 9', read: true },
   { id: 'n4', message: 'Technical Support queue is now open.', type: 'success', time: 'Jul 7', read: true },
 ];
+
+const ADMIN_NOTIFS = [
+  { id: 'a1', message: '3 services need attention before the next shift.', type: 'info', time: '9:40 AM', read: false },
+  { id: 'a2', message: 'Queue volume is high for Technical Support.', type: 'warning', time: '9:20 AM', read: false },
+  { id: 'a3', message: 'Billing & Payments service reopened for new requests.', type: 'success', time: 'Jul 9', read: true },
+];
+
+export function getInitialNotifications(role = 'user') {
+  return role === 'admin' ? ADMIN_NOTIFS.map((item) => ({ ...item })) : USER_NOTIFS.map((item) => ({ ...item }));
+}
