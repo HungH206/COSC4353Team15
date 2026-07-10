@@ -248,6 +248,36 @@
   margin: 0;
   font-size: 2rem;
 }
+/* ===== Modified by Osy (7/10/26): styled Queue Status card + left-aligned content ===== */
+.status-card {
+  padding: 1.5rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  color: var(--card-foreground);
+  text-align: left;          /* shift all card text to the left */
+  display: grid;
+  gap: 1.25rem;
+}
+
+.status-card p {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  justify-items: start;      /* align each stat column to the left */
+  text-align: left;
+}
+
+.status-grid h3 {
+  margin: 0;
+  font-size: 1.75rem;
+}
+/* ===== End Osy modification ===== */
 
 .card-note {
   color: var(--muted-foreground);
