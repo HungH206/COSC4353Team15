@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QueueSmart - Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; display: flex; align-items: center; justify-content: center; height: 100vh; }
+        .auth-card { width: 100%; max-width: 400px; padding: 2rem; border-radius: 10px; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="auth-card">
+    <h2 class="text-center mb-4 text-primary">QueueSmart</h2>
+
+    <form id="loginForm">
+        <h4 class="mb-3">Sign In</h4>
+        <div class="mb-3">
+            <label class="form-label">Email address</label>
+            <input type="email" class="form-control" id="loginEmail" required placeholder="name@example.com">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="loginPassword" required>
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Login</button>
+        <p class="mt-3 text-center text-muted">Don't have an account? <a href="#" onclick="toggleAuth('register')">Register</a></p>
+    </form>
+
+    <form id="registerForm" class="hidden">
+        <h4 class="mb-3">Create Account</h4>
+        <div class="mb-3">
+            <label class="form-label">Email address</label>
+            <input type="email" class="form-control" id="regEmail" required placeholder="name@example.com">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="regPassword" required minlength="6" placeholder="Min 6 characters">
+        </div>
+        <button type="submit" class="btn btn-success w-100">Register</button>
+        <p class="mt-3 text-center text-muted">Already have an account? <a href="#" onclick="toggleAuth('login')">Sign In</a></p>
+    </form>
+</div>
+
+<script>
+    // toggle between login and register forms
+    function toggleAuth(view) {
+        if (view === 'register') {
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('registerForm').classList.remove('hidden');
+        } else {
+            document.getElementById('registerForm').classList.add('hidden');
+            document.getElementById('loginForm').classList.remove('hidden');
+        }
+    }
+
+    // mock authentication: routing users vs admins
+    document.getElementById('loginForm').addEventListener('submit', function(event) {
+        event.preventDefault(); // Prevents the page from reloading
+
+        const email = document.getElementById('loginEmail').value;
+
+        // mock logic to fulfill the user roles requirement
+        if (email === 'admin@queuesmart.com') {
+            alert('Welcome Admin! Routing to Admin Dashboard...');
+            window.location.href = 'admin.html'; // Assuming this is the next file for admin screen
+        } else {
+            alert('Welcome User! Routing to User Dashboard...');
+            window.location.href = 'user.html'; // Assuming this is the next file for user screen
+        }
+    });
+
+    document.getElementById('registerForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+        alert('Registration successful! Please log in.');
+        toggleAuth('login');
+    });
+</script>
+
+</body>
+</html>
