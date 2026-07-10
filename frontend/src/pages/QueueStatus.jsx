@@ -26,7 +26,7 @@ export default function QueueStatus({ activeQueue, services, queues, onLeave }) 
           <p className="subtitle">Track your position and queue progress.</p>
         </div>
       </div>
-
+{/* Modified by Osy (7/10/26): left-aligned status card (styles in App.css) */}
       <div className="status-card">
         <div>
           <p className="badge badge-primary uppercase">Your Position</p>
