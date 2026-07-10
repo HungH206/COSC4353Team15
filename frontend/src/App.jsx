@@ -1,122 +1,178 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+// App.tsx, designed to hold the logic states and render the main components of the application
 
-function App() {
-  const [count, setCount] = useState(0)
+import { useState } from 'react';
+import './App.css';
+import Login from './pages/Login.jsx';
+import Register from './pages/Register.jsx';
+import UserDashboard from './pages/UserDashboard.jsx';
+import JoinQueue from './pages/JoinQueue.jsx';
+import QueueStatus from './pages/QueueStatus.jsx';
+import UserHistory from './pages/UserHistory.jsx';
+import AdminDashboard from './pages/AdminDashboard.jsx';
+import AdminServices from './pages/AdminServices.jsx';
+import AdminQueue from './pages/AdminQueue.jsx';
+import NotificationPanel from './components/NotificationPanel.jsx';
+import { CREDENTIALS, INIT_SERVICES, INIT_QUEUES, INIT_NOTIFS, HISTORY } from './data/mockData.js';
+
+const USER_NAV = [
+  { id: 'user-dashboard', label: 'Dashboard' },
+  { id: 'user-join', label: 'Join Queue' },
+  { id: 'user-status', label: 'Queue Status' },
+  { id: 'user-history', label: 'History' },
+];
+
+const ADMIN_NAV = [
+  { id: 'admin-dashboard', label: 'Dashboard' },
+  { id: 'admin-services', label: 'Services' },
+  { id: 'admin-queue', label: 'Queue Manager' },
+];
+
+export default function App() {
+  const [page, setPage] = useState('login');
+  const [user, setUser] = useState(null);
+  const [services, setServices] = useState(INIT_SERVICES);
+  const [queues, setQueues] = useState(INIT_QUEUES);
+  const [notifs, setNotifs] = useState(INIT_NOTIFS);
+  const [activeQueue, setActiveQueue] = useState(null);
+  const [showNotifs, setShowNotifs] = useState(false);
+
+  const handleLogin = (authUser) => {
+    setUser(authUser);
+    setPage(authUser.role === 'admin' ? 'admin-dashboard' : 'user-dashboard');
+    setShowNotifs(false);
+  };
+
+  const handleRegister = (authUser) => {
+    setUser(authUser);
+    setPage('user-dashboard');
+    setShowNotifs(false);
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setPage('login');
+    setActiveQueue(null);
+  };
+
+  const markRead = (id) => {
+    setNotifs((prev) => prev.map((item) => (item.id === id ? { ...item, read: true } : item)));
+  };
+
+  const pushNotification = (message, type = 'info') => {
+    setNotifs((prev) => [
+      { id: `n_${Date.now()}`, message, type, time: 'Just now', read: false },
+      ...prev,
+    ]);
+  };
+
+  const handleJoinQueue = (service) => {
+    const userEntry = {
+      id: `q_${Date.now()}`,
+      name: user.name,
+      joinedAt: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+      status: 'waiting',
+    };
+    const nextQueue = [...(queues[service.id] || []), userEntry];
+    setQueues((prev) => ({ ...prev, [service.id]: nextQueue }));
+    setActiveQueue({ serviceId: service.id, position: nextQueue.length, serviceName: service.name });
+    pushNotification(`You joined the ${service.name} queue at position #${nextQueue.length}.`, 'success');
+    setPage('user-status');
+  };
+
+  const handleLeaveQueue = () => {
+    if (!activeQueue) return;
+    setQueues((prev) => ({
+      ...prev,
+      [activeQueue.serviceId]: (prev[activeQueue.serviceId] || []).filter((entry) => entry.name !== user.name),
+    }));
+    pushNotification(`You left the ${activeQueue.serviceName} queue.`, 'warning');
+    setActiveQueue(null);
+  };
+
+  const currentNav = user?.role === 'admin' ? ADMIN_NAV : USER_NAV;
+  const currentPageLabel = currentNav.find((item) => item.id === page)?.label || '';
+  const unreadCount = notifs.filter((item) => !item.read).length;
+
+  const renderPage = () => {
+    if (!user) return null;
+    switch (page) {
+      case 'user-dashboard':
+        return <UserDashboard user={user} services={services} queues={queues} notifs={notifs} activeQueue={activeQueue} onNavigate={setPage} />;
+      case 'user-join':
+        return <JoinQueue services={services} queues={queues} activeQueue={activeQueue} onJoin={handleJoinQueue} onLeave={handleLeaveQueue} />;
+      case 'user-status':
+        return <QueueStatus activeQueue={activeQueue} services={services} queues={queues} onLeave={handleLeaveQueue} />;
+      case 'user-history':
+        return <UserHistory history={HISTORY} />;
+      case 'admin-dashboard':
+        return <AdminDashboard services={services} queues={queues} />;
+      case 'admin-services':
+        return <AdminServices services={services} onUpdateServices={setServices} />;
+      case 'admin-queue':
+        return <AdminQueue services={services} queues={queues} onUpdateQueues={setQueues} />;
+      default:
+        return null;
+    }
+  };
+
+  if (!user) {
+    return page === 'register' ? (
+      <Register onRegister={handleRegister} onGoLogin={() => setPage('login')} />
+    ) : (
+      <Login onLogin={handleLogin} onGoRegister={() => setPage('register')} credentials={CREDENTIALS} />
+    );
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand-top">
+          <div className="brand-logo">QueueSmart</div>
+          <span className={`role-pill role-pill-${user.role}`}>{user.role.toUpperCase()}</span>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+        <div className="sidebar-nav">
+          {currentNav.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`sidebar-link ${page === item.id ? 'active' : ''}`}
+              onClick={() => setPage(item.id)}
+            >
+              <span>{item.label}</span>
+            </button>
+          ))}
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
+        <div className="sidebar-footer">
+          <div className="sidebar-user">
+            <strong>{user.name}</strong>
+            <span>{user.email}</span>
+          </div>
+          <div className="sidebar-status">
+            <span>Signed in as</span>
+            <strong>{user.role === 'admin' ? 'Administrator' : 'User'}</strong>
+          </div>
+          <button type="button" className="btn btn-ghost btn-sm w-full" onClick={handleLogout}>
+            Sign out
+          </button>
         </div>
-      </section>
+      </aside>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      <div className="content-area">
+        <header className="topbar">
+          <div>
+            <p className="topbar-label">{currentPageLabel}</p>
+          </div>
+          <div className="topbar-actions">
+            <button type="button" className="icon-btn" onClick={() => setShowNotifs((visible) => !visible)}>
+              Notifications
+              {unreadCount > 0 && <span className="notif-count">{unreadCount}</span>}
+            </button>
+          </div>
+          {showNotifs && <NotificationPanel notifs={notifs} onClose={() => setShowNotifs(false)} onRead={markRead} />}
+        </header>
+        <main className="main-content">{renderPage()}</main>
+      </div>
+    </div>
+  );
 }
-
-export default App
