@@ -18,8 +18,20 @@ before(async () => {
     tokenTtlSeconds: 3600,
     dataFile: path.join(temporaryDirectory, 'users.json'),
     servicesFile: path.join(temporaryDirectory, 'services.json'),
-    admin: { name: 'Admin', email: 'admin@example.com', password: 'admin-password' },
-    demoUser: { name: 'User', email: 'user@example.com', password: 'user-password' },
+    queuesFile: path.join(temporaryDirectory, 'queues.json'),
+    historyFile: path.join(temporaryDirectory, 'history.json'),
+    notificationsFile: path.join(temporaryDirectory, 'notifications.json'),
+    
+    admin: { 
+      name: 'Admin', 
+      email: 'admin@example.com', 
+      password: 'admin-password' 
+    },
+    demoUser: { 
+      name: 'User', 
+      email: 'user@example.com', 
+      password: 'user-password' 
+    },
   });
   
   server = app.listen(0);

@@ -2,6 +2,7 @@ import cors from 'cors';
 import express from 'express';
 import { createAuthModule } from './modules/auth.js';
 import { createServiceModule } from './modules/services.js';
+import { createQueueModule } from './modules/queue.js';
 
 export async function createApp(config) {
   const app = express();
@@ -12,11 +13,32 @@ export async function createApp(config) {
   const auth = await createAuthModule(config);
   const services = await createServiceModule(config, auth);
 
+  // i write this to pass the queue test. Replace these with actual notification and history modules later
+  const dummyHistoryLogger = async (userId, serviceName, waitMinutes, outcome) => {
+
+  };
+  const dummyNotifier = async (userId, message) => {
+    
+  };
+
+
+  const queue = await createQueueModule(
+    config, 
+    auth, 
+    services.store, 
+    dummyHistoryLogger,   //replace with actual history logger
+    dummyNotifier         //replace with actual notifier
+  );
+
+
+
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok' });
   });
+
   app.use('/api/auth', auth.router);
   app.use('/api/services', services.router);
+  app.use('/api/queue', queue.router);
 
   app.use((_request, response) => {
     response.status(404).json({ error: 'Route not found.' });

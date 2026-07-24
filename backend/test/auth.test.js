@@ -15,6 +15,11 @@ before(async () => {
     jwtSecret: 'test-secret-that-is-at-least-32-characters',
     tokenTtlSeconds: 3600,
     dataFile: path.join(temporaryDirectory, 'users.json'),
+    servicesFile: path.join(temporaryDirectory, 'services.json'),
+    queuesFile: path.join(temporaryDirectory, 'queues.json'),
+    historyFile: path.join(temporaryDirectory, 'history.json'),
+    notificationsFile: path.join(temporaryDirectory, 'notifications.json'),
+
     admin: {
       name: 'Test Admin',
       email: 'admin@example.com',
