@@ -1,6 +1,6 @@
 // App.tsx, designed to hold the logic states and render the main components of the application
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './App.css';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
@@ -12,7 +12,8 @@ import AdminDashboard from './pages/AdminDashboard.jsx';
 import AdminServices from './pages/AdminServices.jsx';
 import AdminQueue from './pages/AdminQueue.jsx';
 import NotificationPanel from './components/NotificationPanel.jsx';
-import { CREDENTIALS, INIT_SERVICES, INIT_QUEUES, HISTORY, getInitialNotifications } from './data/mockData.js';
+import { INIT_SERVICES, INIT_QUEUES, HISTORY, getInitialNotifications } from './data/mockData.js';
+import { clearToken, getCurrentUser, loadToken, saveToken } from './api/auth.js';
 
 const USER_NAV = [
   { id: 'user-dashboard', label: 'Dashboard' },
@@ -35,22 +36,37 @@ export default function App() {
   const [notifs, setNotifs] = useState(() => getInitialNotifications('user'));
   const [activeQueue, setActiveQueue] = useState(null);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
-  const handleLogin = (authUser) => {
+  useEffect(() => {
+    const token = loadToken();
+    if (!token) {
+      setCheckingSession(false);
+      return;
+    }
+
+    getCurrentUser(token)
+      .then(({ user: savedUser }) => {
+        setUser(savedUser);
+        setNotifs(getInitialNotifications(savedUser.role));
+        setPage(savedUser.role === 'admin' ? 'admin-dashboard' : 'user-dashboard');
+      })
+      .catch(clearToken)
+      .finally(() => setCheckingSession(false));
+  }, []);
+
+  const handleLogin = ({ user: authUser, token }) => {
+    saveToken(token);
     setUser(authUser);
     setNotifs(getInitialNotifications(authUser.role));
     setPage(authUser.role === 'admin' ? 'admin-dashboard' : 'user-dashboard');
     setShowNotifs(false);
   };
 
-  const handleRegister = (authUser) => {
-    setUser(authUser);
-    setNotifs(getInitialNotifications(authUser.role));
-    setPage('user-dashboard');
-    setShowNotifs(false);
-  };
+  const handleRegister = handleLogin;
 
   const handleLogout = () => {
+    clearToken();
     setUser(null);
     setPage('login');
     setActiveQueue(null);
@@ -95,6 +111,8 @@ export default function App() {
   const currentPageLabel = currentNav.find((item) => item.id === page)?.label || '';
   const unreadCount = notifs.filter((item) => !item.read).length;
 
+  if (checkingSession) return null;
+
   const renderPage = () => {
     if (!user) return null;
     switch (page) {
@@ -121,7 +139,7 @@ export default function App() {
     return page === 'register' ? (
       <Register onRegister={handleRegister} onGoLogin={() => setPage('login')} />
     ) : (
-      <Login onLogin={handleLogin} onGoRegister={() => setPage('register')} credentials={CREDENTIALS} />
+      <Login onLogin={handleLogin} onGoRegister={() => setPage('register')} />
     );
   }
 

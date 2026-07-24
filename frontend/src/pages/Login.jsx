@@ -4,12 +4,14 @@ import { useState } from 'react';
 import Field from '../components/Field.jsx';
 import Button from '../components/Button.jsx';
 import { Hash } from 'lucide-react';
+import { login } from '../api/auth.js';
 
-export default function Login({ onLogin, onGoRegister, credentials }) {
+export default function Login({ onLogin, onGoRegister }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
 
   const validate = () => {
     const next = {};
@@ -20,15 +22,24 @@ export default function Login({ onLogin, onGoRegister, credentials }) {
     return Object.keys(next).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     if (!validate()) return;
-    const user = credentials.find((item) => item.email === email && item.password === password);
-    if (!user) {
-      setErrors({ general: 'Invalid email or password. Check the demo credentials below.' });
-      return;
+
+    setSubmitting(true);
+    try {
+      const session = await login(email.trim(), password);
+      onLogin(session);
+    } catch (error) {
+      setErrors({
+        ...error.fields,
+        general: error.message === 'Failed to fetch'
+          ? 'Cannot reach the authentication server. Make sure the backend is running.'
+          : error.message,
+      });
+    } finally {
+      setSubmitting(false);
     }
-    onLogin(user);
   };
 
   return (
@@ -60,16 +71,17 @@ export default function Login({ onLogin, onGoRegister, credentials }) {
             </div>
             {errors.password && <p className="field-help field-help-error">{errors.password}</p>}
           </div>
-          <Button type="submit" variant="primary" size="lg" className="w-full">Sign In</Button>
+          <Button type="submit" variant="primary" size="lg" className="w-full" disabled={submitting}>
+            {submitting ? 'Signing In...' : 'Sign In'}
+          </Button>
         </form>
         <div className="auth-switch">
           <span>Don't have an account?</span>
           <button type="button" className="link-button" onClick={onGoRegister}>Register</button>
         </div>
         <div className="demo-credentials">
-          <strong>Demo credentials</strong>
-          <div><span>User:</span><code>user@demo.com / password123</code></div>
-          <div><span>Admin:</span><code>admin@demo.com / password123</code></div>
+          <strong>Demo account</strong>
+          <div><span>User:</span><code>user1@example.com / password123</code></div>
         </div>
       </div>
     </div>

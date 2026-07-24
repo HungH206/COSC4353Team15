@@ -5,11 +5,13 @@ import { useState } from 'react';
 import Field from '../components/Field.jsx';
 import Button from '../components/Button.jsx';
 import { Hash } from 'lucide-react';
+import { register } from '../api/auth.js';
 
 export default function Register({ onRegister, onGoLogin }) {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
 
   const update = (field) => (event) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -27,10 +29,24 @@ export default function Register({ onRegister, onGoLogin }) {
     return Object.keys(next).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     if (!validate()) return;
-    onRegister({ id: `u_${Date.now()}`, name: form.name, email: form.email, role: 'user' });
+
+    setSubmitting(true);
+    try {
+      const session = await register(form.name.trim(), form.email.trim(), form.password);
+      onRegister(session);
+    } catch (error) {
+      setErrors({
+        ...error.fields,
+        general: error.message === 'Failed to fetch'
+          ? 'Cannot reach the authentication server. Make sure the backend is running.'
+          : error.message,
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -42,6 +58,7 @@ export default function Register({ onRegister, onGoLogin }) {
           <p className="subtitle">Join QueueSmart today</p>
         </div>
         <form onSubmit={handleSubmit} className="auth-form">
+          {errors.general && <div className="alert alert-error">{errors.general}</div>}
           <Field id="register-name" label="Full Name" type="text" value={form.name} onChange={update('name')} error={errors.name} placeholder="Alex Chen" />
           <Field id="register-email" label="Email address" type="email" value={form.email} onChange={update('email')} error={errors.email} placeholder="you@example.com" />
           <div className="field-group">
@@ -63,7 +80,9 @@ export default function Register({ onRegister, onGoLogin }) {
             {errors.password && <p className="field-help field-help-error">{errors.password}</p>}
           </div>
           <Field id="register-confirm" label="Confirm Password" type="password" value={form.confirm} onChange={update('confirm')} error={errors.confirm} placeholder="••••••••" />
-          <Button type="submit" variant="primary" size="lg" className="w-full">Create Account</Button>
+          <Button type="submit" variant="primary" size="lg" className="w-full" disabled={submitting}>
+            {submitting ? 'Creating Account...' : 'Create Account'}
+          </Button>
         </form>
         <div className="auth-switch">
           <span>Already have an account?</span>
