@@ -15,6 +15,8 @@ export function loadConfig(overrides = {}) {
     jwtSecret: process.env.JWT_SECRET,
     tokenTtlSeconds: positiveInteger(process.env.TOKEN_TTL_SECONDS, 3600),
     dataFile: path.resolve(backendRoot, process.env.DATA_FILE ?? 'data/users.json'),
+    servicesFile: path.resolve(backendRoot, process.env.SERVICES_FILE ?? 'data/services.json'),
+    
     admin: {
       name: process.env.ADMIN_NAME,
       email: process.env.ADMIN_EMAIL,

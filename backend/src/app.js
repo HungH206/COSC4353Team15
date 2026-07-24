@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express from 'express';
 import { createAuthModule } from './modules/auth.js';
+import { createServiceModule } from './modules/services.js';
 
 export async function createApp(config) {
   const app = express();
@@ -9,11 +10,13 @@ export async function createApp(config) {
   app.use(express.json({ limit: '20kb' }));
 
   const auth = await createAuthModule(config);
+  const services = await createServiceModule(config, auth);
 
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok' });
   });
   app.use('/api/auth', auth.router);
+  app.use('/api/services', services.router);
 
   app.use((_request, response) => {
     response.status(404).json({ error: 'Route not found.' });
