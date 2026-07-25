@@ -12,12 +12,12 @@ import AdminDashboard from './pages/AdminDashboard.jsx';
 import AdminServices from './pages/AdminServices.jsx';
 import AdminQueue from './pages/AdminQueue.jsx';
 import NotificationPanel from './components/NotificationPanel.jsx';
-import { HISTORY } from './data/mockData.js';
 import { clearToken, getCurrentUser, loadToken, saveToken } from './api/auth.js';
 import { createService, deleteService, listServices, updateService } from './api/services.js';
 import { getAllQueues, getMyQueues, getQueueCounts, joinQueue, leaveQueue, serveNext } from './api/queue.js';
 import { getWaitTimeEstimate, listWaitTimeEstimates } from './api/timeEstimation.js';
 import { listNotifications, markNotificationRead } from './api/notifications.js';
+import { listHistory } from './api/history.js';
 
 const USER_NAV = [
   { id: 'user-dashboard', label: 'Dashboard' },
@@ -40,6 +40,7 @@ export default function App() {
   const [notifs, setNotifs] = useState([]);
   const [activeQueue, setActiveQueue] = useState(null);
   const [waitEstimates, setWaitEstimates] = useState({});
+  const [history, setHistory] = useState([]);
   const [showNotifs, setShowNotifs] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
 
@@ -63,6 +64,7 @@ export default function App() {
     saveToken(token);
     setUser(authUser);
     setNotifs([]);
+    setHistory([]);
     setPage(authUser.role === 'admin' ? 'admin-dashboard' : 'user-dashboard');
     setShowNotifs(false);
   };
@@ -97,10 +99,11 @@ export default function App() {
           return;
         }
 
-        const [memberships, counts, estimates] = await Promise.all([
+        const [memberships, counts, estimates, loadedHistory] = await Promise.all([
           getMyQueues(),
           getQueueCounts(),
           listWaitTimeEstimates(),
+          listHistory(),
         ]);
         const queueCounts = Object.fromEntries(
           Object.entries(counts).map(([serviceId, count]) => [serviceId, Array(count).fill(null)]),
@@ -109,6 +112,7 @@ export default function App() {
         if (current) queueCounts[current.serviceId] = current.queue;
         setQueues(queueCounts);
         setWaitEstimates(estimates);
+        setHistory(loadedHistory);
         setActiveQueue(current ? {
           serviceId: current.serviceId,
           serviceName: current.serviceName,
@@ -123,6 +127,13 @@ export default function App() {
 
     loadApplicationData();
   }, [user]);
+
+  useEffect(() => {
+    if (!user || user.role === 'admin' || page !== 'user-history') return;
+    listHistory()
+      .then(setHistory)
+      .catch((error) => pushNotification(error.message, 'warning'));
+  }, [page, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -180,7 +191,10 @@ export default function App() {
   const handleLeaveQueue = async () => {
     if (!activeQueue) return;
     await leaveQueue(activeQueue.serviceId);
-    const estimates = await listWaitTimeEstimates();
+    const [estimates, updatedHistory] = await Promise.all([
+      listWaitTimeEstimates(),
+      listHistory(),
+    ]);
     setQueues((prev) => ({
       ...prev,
       [activeQueue.serviceId]: (prev[activeQueue.serviceId] || []).filter((entry) => entry?.id !== activeQueue.entryId),
@@ -188,6 +202,7 @@ export default function App() {
     pushNotification(`You left the ${activeQueue.serviceName} queue.`, 'warning');
     setActiveQueue(null);
     setWaitEstimates(estimates);
+    setHistory(updatedHistory);
   };
 
   const handleSaveService = async (service, id) => {
@@ -230,7 +245,7 @@ export default function App() {
       case 'user-status':
         return <QueueStatus activeQueue={activeQueue} services={services} queues={queues} estimate={waitEstimates[activeQueue?.serviceId]} onLeave={handleLeaveQueue} />;
       case 'user-history':
-        return <UserHistory history={HISTORY} />;
+        return <UserHistory history={history} />;
       case 'admin-dashboard':
         return <AdminDashboard services={services} queues={queues} />;
       case 'admin-services':

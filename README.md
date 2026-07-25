@@ -90,9 +90,11 @@ people ahead, and estimated wait.
 
 ### History
 
-The History page currently uses mock frontend data. The backend queue module has
-a placeholder history callback, ready to be replaced by a persistent History
-module.
+- Leaving a queue records a `left` outcome
+- Being served records a `served` outcome
+- Records include service name, estimated wait, outcome, and timestamp
+- Users can retrieve only their own history
+- The Queue History page loads authenticated backend records
 
 ## Prerequisites
 
@@ -227,6 +229,7 @@ The default API base URL is `http://localhost:3000/api`.
 | `GET` | `/time-estimation/:serviceId` | Authenticated | Get one estimate |
 | `GET` | `/notifications` | Authenticated | List personal notifications |
 | `PATCH` | `/notifications/:id/read` | Authenticated | Mark a notification read |
+| `GET` | `/history` | Authenticated | List personal queue history |
 
 Authenticated requests use:
 
@@ -236,7 +239,7 @@ Authorization: Bearer <token>
 
 ## Testing and validation
 
-Run all backend integration tests:
+ Unit tests include: auth.test.js; notifications.test.js; queue.test.js; services.test.js, history_test.js; and time_estimation.test.js. Run all backend integration tests:
 
 ```powershell
 cd backend
@@ -259,5 +262,4 @@ npm run build
   independent local data.
 - There is no real email or SMS delivery; notifications are stored and returned
   through the application.
-- The History backend module remains to be implemented.
 - Predictable demonstration credentials must not be used in production.

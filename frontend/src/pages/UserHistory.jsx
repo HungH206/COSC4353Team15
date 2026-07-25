@@ -4,6 +4,17 @@
 import Badge from '../components/Badge.jsx';
 
 export default function UserHistory({ history }) {
+  const formatDate = (value) => {
+    if (!value) return 'Unknown';
+    return new Date(value).toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
   return (
     <div className="page-grid max-w-3xl">
       <div className="page-header">
@@ -19,16 +30,22 @@ export default function UserHistory({ history }) {
           <span>Wait</span>
           <span>Outcome</span>
         </div>
-        {history.map((item) => (
-          <div key={item.id} className="history-row">
-            <span>{item.serviceName}</span>
-            <span>{item.date}</span>
-            <span>{item.waitMinutes} min</span>
-            <span>
-              <Badge text={item.outcome === 'served' ? 'Served' : 'Left'} className={item.outcome === 'served' ? 'badge-success' : 'badge-muted'} />
-            </span>
+        {history.length === 0 ? (
+          <div className="empty-state-card">
+            <p>No queue history yet.</p>
           </div>
-        ))}
+        ) : (
+          history.map((item) => (
+            <div key={item.id} className="history-row">
+              <span>{item.serviceName}</span>
+              <span>{formatDate(item.createdAt)}</span>
+              <span>{item.waitMinutes} min</span>
+              <span>
+                <Badge text={item.outcome === 'served' ? 'Served' : 'Left'} className={item.outcome === 'served' ? 'badge-success' : 'badge-muted'} />
+              </span>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
