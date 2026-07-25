@@ -4,6 +4,7 @@ import { createAuthModule } from './modules/auth.js';
 import { createServiceModule } from './modules/services.js';
 import { createQueueModule } from './modules/queue.js';
 import { createNotificationModule } from './modules/notifs.js';
+import { createHistoryModule } from './modules/history.js';
 import { createTimeEstimationModule } from './modules/time_estimation.js';
 
 export async function createApp(config) {
@@ -15,17 +16,13 @@ export async function createApp(config) {
   const auth = await createAuthModule(config);
   const services = await createServiceModule(config, auth);
   const notifications = await createNotificationModule(config, auth);
-  
-  // i write this to pass the queue test. Replace these with actual notification and history modules later
-  const dummyHistoryLogger = async (userId, serviceName, waitMinutes, outcome) => {
-
-  };
+  const history = await createHistoryModule(config, auth);
 
   const queue = await createQueueModule(
     config,
     auth,
     services.store,
-    dummyHistoryLogger,   // replace with actual history logger
+    history.log,          // real history logger now
     notifications.notify  // real notifier now, was dummyNotifier
   );
   const timeEstimation = createTimeEstimationModule(auth, services.store, queue.store);
@@ -39,6 +36,7 @@ export async function createApp(config) {
   app.use('/api/queue', queue.router);
   app.use('/api/time-estimation', timeEstimation.router);
   app.use('/api/notifications', notifications.router);
+  app.use('/api/history', history.router);
 
   app.use((_request, response) => {
     response.status(404).json({ error: 'Route not found.' });
