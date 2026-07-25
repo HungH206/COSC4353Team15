@@ -31,26 +31,9 @@ before(async () => {
   await new Promise((resolve) => server.once('listening', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 
-  const adminRes = await fetch(`${baseUrl}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: 'admin@example.com', password: 'admin-password' }),
-  });
-  adminToken = (await adminRes.json()).token;
-
-  const userRes = await fetch(`${baseUrl}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: 'user@example.com', password: 'user-password' }),
-  });
-  userToken = (await userRes.json()).token;
-
-  const svcRes = await fetch(`${baseUrl}/api/services`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
-    body: JSON.stringify({ name: 'Notification Test Service', description: 'Test', expectedDuration: 10, priority: 'medium' }),
-  });
-  serviceId = (await svcRes.json()).service.id;
+  adminToken = await login('admin@example.com', 'admin-password');
+  userToken = await login('user@example.com', 'user-password');
+  serviceId = await createService('Notification Test Service');
 });
 
 after(async () => {
@@ -67,48 +50,144 @@ async function request(route, options = {}, token = null) {
   return { status: response.status, body };
 }
 
+async function login(email, password) {
+  const response = await request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+  return response.body.token;
+}
+
+async function registerAndLogin(name, email, password) {
+  await request('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ name, email, password }),
+  });
+  return login(email, password);
+}
+
+async function createService(name) {
+  const response = await request('/api/services', {
+    method: 'POST',
+    body: JSON.stringify({
+      name,
+      description: 'Notification integration test service',
+      expectedDuration: 10,
+      priority: 'medium',
+    }),
+  }, adminToken);
+  return response.body.service.id;
+}
+
 test('user receives a notification when joining the queue', async () => {
-  const res = await request('/api/queue/join', { method: 'POST', body: JSON.stringify({ serviceId }) }, userToken);
+  const joined = await request('/api/queue/join', {
+    method: 'POST',
+    body: JSON.stringify({ serviceId }),
+  }, userToken);
+  assert.equal(joined.status, 200);
 
-  assert.equal(res.status, 200);
-
-  const notificationsRes = await request('/api/notifications', { method: 'GET' }, userToken);
-  assert.equal(notificationsRes.status, 200);
-  assert.equal(notificationsRes.body.notifications.length > 0, true);
-  assert.match(notificationsRes.body.notifications[0].message, /joined the queue/i);
+  const result = await request('/api/notifications', { method: 'GET' }, userToken);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.notifications.length, 1);
+  assert.match(result.body.notifications[0].message, /joined the queue/i);
 });
 
-test('user can mark only their own notification as read', async () => {
-  const notificationsRes = await request('/api/notifications', { method: 'GET' }, userToken);
-  const notification = notificationsRes.body.notifications[0];
-  const readRes = await request(
+test('user can mark their own notification as read', async () => {
+  const result = await request('/api/notifications', { method: 'GET' }, userToken);
+  const notification = result.body.notifications[0];
+
+  const marked = await request(
     `/api/notifications/${notification.id}/read`,
     { method: 'PATCH' },
     userToken,
   );
-  assert.equal(readRes.status, 200);
-  assert.equal(readRes.body.notification.read, true);
+  assert.equal(marked.status, 200);
+  assert.equal(marked.body.notification.read, true);
+
+  const otherUserAttempt = await request(
+    `/api/notifications/${notification.id}/read`,
+    { method: 'PATCH' },
+    adminToken,
+  );
+  assert.equal(otherUserAttempt.status, 404);
 });
 
 test('next user receives a notification when the current user is served', async () => {
-  await fetch(`${baseUrl}/api/auth/register`, {
+  const isolatedServiceId = await createService('Serve Notification Service');
+  const firstToken = await registerAndLogin(
+    'First In Line',
+    'first-in-line@example.com',
+    'first-password',
+  );
+  const secondToken = await registerAndLogin(
+    'Second In Line',
+    'second-in-line@example.com',
+    'second-password',
+  );
+
+  await request('/api/queue/join', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: 'Second User', email: 'second@example.com', password: 'second-password' }),
-  });
-  const secondUserLogin = await fetch(`${baseUrl}/api/auth/login`, {
+    body: JSON.stringify({ serviceId: isolatedServiceId }),
+  }, firstToken);
+  await request('/api/queue/join', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: 'second@example.com', password: 'second-password' }),
-  });
-  const secondUserToken = (await secondUserLogin.json()).token;
+    body: JSON.stringify({ serviceId: isolatedServiceId }),
+  }, secondToken);
 
-  await request('/api/queue/join', { method: 'POST', body: JSON.stringify({ serviceId }) }, secondUserToken);
-  const serveRes = await request(`/api/queue/${serviceId}/serve`, { method: 'POST' }, adminToken);
+  const served = await request(
+    `/api/queue/${isolatedServiceId}/serve`,
+    { method: 'POST' },
+    adminToken,
+  );
+  assert.equal(served.status, 200);
 
-  assert.equal(serveRes.status, 200);
+  const result = await request('/api/notifications', { method: 'GET' }, secondToken);
+  assert.equal(result.status, 200);
+  assert.match(result.body.notifications[0].message, /next/i);
+});
 
-  const notificationsRes = await request('/api/notifications', { method: 'GET' }, secondUserToken);
-  assert.equal(notificationsRes.status, 200);
-  assert.match(notificationsRes.body.notifications[0].message, /next/i);
+test('rejects requests for notifications without a valid token', async () => {
+  const noToken = await request('/api/notifications', { method: 'GET' });
+  assert.equal(noToken.status, 401);
+
+  const badToken = await request('/api/notifications', { method: 'GET' }, 'not-a-real-token');
+  assert.equal(badToken.status, 401);
+});
+
+test('returns an empty list for a user with no notification history', async () => {
+  const freshToken = await registerAndLogin(
+    'Fresh User',
+    'fresh-user@example.com',
+    'fresh-password',
+  );
+
+  const result = await request('/api/notifications', { method: 'GET' }, freshToken);
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.notifications, []);
+});
+
+test('does not leak one user notification to another user', async () => {
+  const isolatedServiceId = await createService('Isolation Test Service');
+  const activeToken = await registerAndLogin(
+    'Active User',
+    'active-user@example.com',
+    'active-password',
+  );
+  const bystanderToken = await registerAndLogin(
+    'Bystander User',
+    'bystander-user@example.com',
+    'bystander-password',
+  );
+
+  await request('/api/queue/join', {
+    method: 'POST',
+    body: JSON.stringify({ serviceId: isolatedServiceId }),
+  }, activeToken);
+
+  const active = await request('/api/notifications', { method: 'GET' }, activeToken);
+  assert.equal(active.body.notifications.length, 1);
+
+  const bystander = await request('/api/notifications', { method: 'GET' }, bystanderToken);
+  assert.equal(bystander.status, 200);
+  assert.deepEqual(bystander.body.notifications, []);
 });
