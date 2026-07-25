@@ -1,9 +1,25 @@
 // QUEUE STATUS PAGE
 // Created by: Hung Hoang, 7/9/2026, with logics from user.html by Sean Dang
+import { useState } from 'react';
 import Button from '../components/Button.jsx';
 import Badge from '../components/Badge.jsx';
 
-export default function QueueStatus({ activeQueue, services, queues, onLeave }) {
+export default function QueueStatus({ activeQueue, services, queues, estimate, onLeave }) {
+  const [error, setError] = useState('');
+  const [leaving, setLeaving] = useState(false);
+
+  const handleLeave = async () => {
+    setLeaving(true);
+    setError('');
+    try {
+      await onLeave();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLeaving(false);
+    }
+  };
+
   if (!activeQueue) {
     return (
       <div className="empty-state-card">
@@ -15,8 +31,8 @@ export default function QueueStatus({ activeQueue, services, queues, onLeave }) 
 
   const service = services.find((svc) => svc.id === activeQueue.serviceId);
   const queue = queues[activeQueue.serviceId] ?? [];
-  const aheadCount = activeQueue.position - 1;
-  const estWait = aheadCount * (service?.expectedDuration ?? 10);
+  const aheadCount = estimate?.peopleAhead ?? activeQueue.position - 1;
+  const estWait = estimate?.estimatedWait ?? activeQueue.estWait ?? 0;
 
   return (
     <div className="page-grid">
@@ -26,6 +42,7 @@ export default function QueueStatus({ activeQueue, services, queues, onLeave }) 
           <p className="subtitle">Track your position and queue progress.</p>
         </div>
       </div>
+      {error && <div className="alert alert-error">{error}</div>}
 {/* Modified by Osy (7/10/26): left-aligned status card (styles in App.css) */}
       <div className="status-card">
         <div>
@@ -65,7 +82,9 @@ export default function QueueStatus({ activeQueue, services, queues, onLeave }) 
         </div>
       </section>
 
-      <Button variant="danger" onClick={onLeave}>Leave Queue</Button>
+      <Button variant="danger" onClick={handleLeave} disabled={leaving}>
+        {leaving ? 'Leaving...' : 'Leave Queue'}
+      </Button>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { createAuthModule } from './modules/auth.js';
 import { createServiceModule } from './modules/services.js';
 import { createQueueModule } from './modules/queue.js';
 import { createNotificationModule } from './modules/notifs.js';
+import { createTimeEstimationModule } from './modules/time_estimation.js';
 
 export async function createApp(config) {
   const app = express();
@@ -27,6 +28,7 @@ export async function createApp(config) {
     dummyHistoryLogger,   // replace with actual history logger
     notifications.notify  // real notifier now, was dummyNotifier
   );
+  const timeEstimation = createTimeEstimationModule(auth, services.store, queue.store);
 
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok' });
@@ -35,6 +37,7 @@ export async function createApp(config) {
   app.use('/api/auth', auth.router);
   app.use('/api/services', services.router);
   app.use('/api/queue', queue.router);
+  app.use('/api/time-estimation', timeEstimation.router);
   app.use('/api/notifications', notifications.router);
 
   app.use((_request, response) => {

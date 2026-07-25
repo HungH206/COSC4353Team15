@@ -12,8 +12,12 @@ import AdminDashboard from './pages/AdminDashboard.jsx';
 import AdminServices from './pages/AdminServices.jsx';
 import AdminQueue from './pages/AdminQueue.jsx';
 import NotificationPanel from './components/NotificationPanel.jsx';
-import { INIT_SERVICES, INIT_QUEUES, HISTORY, getInitialNotifications } from './data/mockData.js';
+import { HISTORY } from './data/mockData.js';
 import { clearToken, getCurrentUser, loadToken, saveToken } from './api/auth.js';
+import { createService, deleteService, listServices, updateService } from './api/services.js';
+import { getAllQueues, getMyQueues, getQueueCounts, joinQueue, leaveQueue, serveNext } from './api/queue.js';
+import { getWaitTimeEstimate, listWaitTimeEstimates } from './api/timeEstimation.js';
+import { listNotifications, markNotificationRead } from './api/notifications.js';
 
 const USER_NAV = [
   { id: 'user-dashboard', label: 'Dashboard' },
@@ -31,10 +35,11 @@ const ADMIN_NAV = [
 export default function App() {
   const [page, setPage] = useState('login');
   const [user, setUser] = useState(null);
-  const [services, setServices] = useState(INIT_SERVICES);
-  const [queues, setQueues] = useState(INIT_QUEUES);
-  const [notifs, setNotifs] = useState(() => getInitialNotifications('user'));
+  const [services, setServices] = useState([]);
+  const [queues, setQueues] = useState({});
+  const [notifs, setNotifs] = useState([]);
   const [activeQueue, setActiveQueue] = useState(null);
+  const [waitEstimates, setWaitEstimates] = useState({});
   const [showNotifs, setShowNotifs] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
 
@@ -48,7 +53,6 @@ export default function App() {
     getCurrentUser(token)
       .then(({ user: savedUser }) => {
         setUser(savedUser);
-        setNotifs(getInitialNotifications(savedUser.role));
         setPage(savedUser.role === 'admin' ? 'admin-dashboard' : 'user-dashboard');
       })
       .catch(clearToken)
@@ -58,7 +62,7 @@ export default function App() {
   const handleLogin = ({ user: authUser, token }) => {
     saveToken(token);
     setUser(authUser);
-    setNotifs(getInitialNotifications(authUser.role));
+    setNotifs([]);
     setPage(authUser.role === 'admin' ? 'admin-dashboard' : 'user-dashboard');
     setShowNotifs(false);
   };
@@ -70,41 +74,144 @@ export default function App() {
     setUser(null);
     setPage('login');
     setActiveQueue(null);
+    setServices([]);
+    setQueues({});
+    setWaitEstimates({});
+    setNotifs([]);
   };
 
-  const markRead = (id) => {
-    setNotifs((prev) => prev.map((item) => (item.id === id ? { ...item, read: true } : item)));
+  useEffect(() => {
+    if (!user) return;
+
+    const loadApplicationData = async () => {
+      try {
+        const [loadedServices, loadedNotifications] = await Promise.all([
+          listServices(),
+          listNotifications(),
+        ]);
+        setServices(loadedServices);
+        setNotifs(loadedNotifications);
+
+        if (user.role === 'admin') {
+          setQueues(await getAllQueues());
+          return;
+        }
+
+        const [memberships, counts, estimates] = await Promise.all([
+          getMyQueues(),
+          getQueueCounts(),
+          listWaitTimeEstimates(),
+        ]);
+        const queueCounts = Object.fromEntries(
+          Object.entries(counts).map(([serviceId, count]) => [serviceId, Array(count).fill(null)]),
+        );
+        const current = memberships[0] ?? null;
+        if (current) queueCounts[current.serviceId] = current.queue;
+        setQueues(queueCounts);
+        setWaitEstimates(estimates);
+        setActiveQueue(current ? {
+          serviceId: current.serviceId,
+          serviceName: current.serviceName,
+          position: current.position,
+          estWait: current.estWait,
+          entryId: current.entry.id,
+        } : null);
+      } catch (error) {
+        pushNotification(error.message, 'warning');
+      }
+    };
+
+    loadApplicationData();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const refreshNotifications = async () => {
+      try {
+        setNotifs(await listNotifications());
+      } catch {
+        // Session and connection errors are handled by normal application requests.
+      }
+    };
+    const interval = setInterval(refreshNotifications, 10000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const markRead = async (id) => {
+    if (!id.startsWith('local_')) {
+      try {
+        await markNotificationRead(id);
+      } catch {
+        return;
+      }
+    }
+    setNotifs((previous) => previous.map((item) => item.id === id ? { ...item, read: true } : item));
   };
 
   const pushNotification = (message, type = 'info') => {
     setNotifs((prev) => [
-      { id: `n_${Date.now()}`, message, type, time: 'Just now', read: false },
+      { id: `local_${Date.now()}`, message, type, time: 'Just now', read: false },
       ...prev,
     ]);
   };
 
-  const handleJoinQueue = (service) => {
-    const userEntry = {
-      id: `q_${Date.now()}`,
-      name: user.name,
-      joinedAt: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-      status: 'waiting',
-    };
-    const nextQueue = [...(queues[service.id] || []), userEntry];
-    setQueues((prev) => ({ ...prev, [service.id]: nextQueue }));
-    setActiveQueue({ serviceId: service.id, position: nextQueue.length, serviceName: service.name });
-    pushNotification(`You joined the ${service.name} queue at position #${nextQueue.length}.`, 'success');
+  const handleJoinQueue = async (service) => {
+    const result = await joinQueue(service.id);
+    const [estimate, notifications] = await Promise.all([
+      getWaitTimeEstimate(service.id),
+      listNotifications(),
+    ]);
+    setQueues((previous) => ({
+      ...previous,
+      [service.id]: [...(previous[service.id] || []).filter(Boolean), result.entry],
+    }));
+    setActiveQueue({
+      serviceId: service.id,
+      position: result.position,
+      serviceName: service.name,
+      estWait: result.estWait,
+      entryId: result.entry.id,
+    });
+    setWaitEstimates((previous) => ({ ...previous, [service.id]: estimate }));
+    setNotifs(notifications);
     setPage('user-status');
   };
 
-  const handleLeaveQueue = () => {
+  const handleLeaveQueue = async () => {
     if (!activeQueue) return;
+    await leaveQueue(activeQueue.serviceId);
+    const estimates = await listWaitTimeEstimates();
     setQueues((prev) => ({
       ...prev,
-      [activeQueue.serviceId]: (prev[activeQueue.serviceId] || []).filter((entry) => entry.name !== user.name),
+      [activeQueue.serviceId]: (prev[activeQueue.serviceId] || []).filter((entry) => entry?.id !== activeQueue.entryId),
     }));
     pushNotification(`You left the ${activeQueue.serviceName} queue.`, 'warning');
     setActiveQueue(null);
+    setWaitEstimates(estimates);
+  };
+
+  const handleSaveService = async (service, id) => {
+    const saved = id ? await updateService(id, service) : await createService(service);
+    setServices((previous) => id
+      ? previous.map((item) => item.id === id ? saved : item)
+      : [...previous, saved]);
+    return saved;
+  };
+
+  const handleDeleteService = async (id) => {
+    await deleteService(id);
+    setServices((previous) => previous.filter((service) => service.id !== id));
+    setQueues((previous) => {
+      const next = { ...previous };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const handleServeNext = async (serviceId) => {
+    const result = await serveNext(serviceId);
+    setQueues(await getAllQueues());
+    pushNotification(`${result.served.name} was served.`, 'success');
   };
 
   const currentNav = user?.role === 'admin' ? ADMIN_NAV : USER_NAV;
@@ -119,17 +226,17 @@ export default function App() {
       case 'user-dashboard':
         return <UserDashboard user={user} services={services} queues={queues} notifs={notifs} activeQueue={activeQueue} onNavigate={setPage} />;
       case 'user-join':
-        return <JoinQueue services={services} queues={queues} activeQueue={activeQueue} onJoin={handleJoinQueue} onLeave={handleLeaveQueue} />;
+        return <JoinQueue services={services} waitEstimates={waitEstimates} activeQueue={activeQueue} onJoin={handleJoinQueue} onLeave={handleLeaveQueue} />;
       case 'user-status':
-        return <QueueStatus activeQueue={activeQueue} services={services} queues={queues} onLeave={handleLeaveQueue} />;
+        return <QueueStatus activeQueue={activeQueue} services={services} queues={queues} estimate={waitEstimates[activeQueue?.serviceId]} onLeave={handleLeaveQueue} />;
       case 'user-history':
         return <UserHistory history={HISTORY} />;
       case 'admin-dashboard':
         return <AdminDashboard services={services} queues={queues} />;
       case 'admin-services':
-        return <AdminServices services={services} onUpdateServices={setServices} />;
+        return <AdminServices services={services} onSaveService={handleSaveService} onDeleteService={handleDeleteService} />;
       case 'admin-queue':
-        return <AdminQueue services={services} queues={queues} onUpdateQueues={setQueues} />;
+        return <AdminQueue services={services} queues={queues} onServeNext={handleServeNext} />;
       default:
         return null;
     }

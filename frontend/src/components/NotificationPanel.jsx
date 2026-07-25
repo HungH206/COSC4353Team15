@@ -1,4 +1,15 @@
 export default function NotificationPanel({ notifs, onClose, onRead }) {
+  const displayTime = (item) => {
+    if (item.time) return item.time;
+    if (!item.createdAt) return '';
+    return new Date(item.createdAt).toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
   return (
     <div className="notif-panel">
       <div className="notif-panel-header">
@@ -16,7 +27,7 @@ export default function NotificationPanel({ notifs, onClose, onRead }) {
             className={`notif-item ${item.read ? '' : 'notif-item-unread'}`}
           >
             <div className="notif-item-message">{item.message}</div>
-            <div className="notif-item-meta">{item.time}</div>
+            <div className="notif-item-meta">{displayTime(item)}</div>
           </button>
         ))}
       </div>

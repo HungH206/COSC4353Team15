@@ -8,11 +8,12 @@ import { Plus, X, Edit2, Trash2 } from 'lucide-react';
 
 const blankService = { name: '', description: '', expectedDuration: 10, priority: 'medium', isOpen: true };
 
-export default function AdminServices({ services, onUpdateServices }) {
+export default function AdminServices({ services, onSaveService, onDeleteService }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(blankService);
   const [formOpen, setFormOpen] = useState(false);
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
 
   const openForm = (service) => {
     if (!service) {
@@ -38,23 +39,38 @@ export default function AdminServices({ services, onUpdateServices }) {
     if (!form.name.trim()) next.name = 'Service name is required.';
     if (form.name.length > 100) next.name = 'Maximum 100 characters.';
     if (!form.description.trim()) next.description = 'Description is required.';
-    if (!form.expectedDuration || form.expectedDuration < 1) next.duration = 'Enter a positive duration.';
+    if (!form.expectedDuration || form.expectedDuration < 1) next.expectedDuration = 'Enter a positive duration.';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) return;
-    if (editing) {
-      onUpdateServices(services.map((svc) => (svc.id === editing.id ? { ...svc, ...form } : svc)));
-    } else {
-      onUpdateServices([...services, { id: `s_${Date.now()}`, ...form }]);
+    setSubmitting(true);
+    try {
+      await onSaveService(form, editing?.id);
+      closeForm();
+    } catch (error) {
+      setErrors({ ...error.fields, general: error.message });
+    } finally {
+      setSubmitting(false);
     }
-    closeForm();
   };
 
-  const toggleOpen = (serviceId) => {
-    onUpdateServices(services.map((svc) => svc.id === serviceId ? { ...svc, isOpen: !svc.isOpen } : svc));
+  const toggleOpen = async (service) => {
+    try {
+      await onSaveService({ ...service, isOpen: !service.isOpen }, service.id);
+    } catch (error) {
+      setErrors({ general: error.message });
+    }
+  };
+
+  const handleDelete = async (service) => {
+    try {
+      await onDeleteService(service.id);
+    } catch (error) {
+      setErrors({ general: error.message });
+    }
   };
 
   return (
@@ -68,8 +84,10 @@ export default function AdminServices({ services, onUpdateServices }) {
           <Plus size={14} /> New Service
         </Button>
       </div>
+      {!formOpen && errors.general && <div className="alert alert-error">{errors.general}</div>}
       {formOpen && (
         <div className="panel-card">
+          {errors.general && <div className="alert alert-error">{errors.general}</div>}
           <div className="panel-header">
             <div>
               <strong>{editing ? `Edit ${editing.name}` : 'Create New Service'}</strong>
@@ -100,7 +118,7 @@ export default function AdminServices({ services, onUpdateServices }) {
             <div className="field-group">
               <label className="field-label">Expected Duration</label>
               <input type="number" min="1" max="999" value={form.expectedDuration} onChange={(e) => setForm((prev) => ({ ...prev, expectedDuration: parseInt(e.target.value, 10) || 0 }))} className={`field-input ${errors.duration ? 'field-error' : ''}`} />
-              {errors.duration && <p className="field-help field-help-error">{errors.duration}</p>}
+              {errors.expectedDuration && <p className="field-help field-help-error">{errors.expectedDuration}</p>}
             </div>
             <div className="field-group">
               <label className="field-label">Queue Open</label>
@@ -114,8 +132,8 @@ export default function AdminServices({ services, onUpdateServices }) {
             </div>
           </div>
           <div className="button-row">
-            <Button variant="primary" onClick={handleSave}>Save Service</Button>
-            <Button variant="secondary" onClick={() => openForm(null)}>Cancel</Button>
+            <Button variant="primary" onClick={handleSave} disabled={submitting}>{submitting ? 'Saving...' : 'Save Service'}</Button>
+            <Button variant="secondary" onClick={closeForm} disabled={submitting}>Cancel</Button>
           </div>
         </div>
       )}
@@ -140,11 +158,11 @@ export default function AdminServices({ services, onUpdateServices }) {
                 <Badge text={svc.priority} className={svc.priority === 'high' ? 'badge-danger' : svc.priority === 'medium' ? 'badge-warning' : 'badge-success'} />
               </div>
               <div>
-                <Button variant="ghost" size="sm" onClick={() => toggleOpen(svc.id)}>{svc.isOpen ? 'Open' : 'Closed'}</Button>
+                <Button variant="ghost" size="sm" onClick={() => toggleOpen(svc)}>{svc.isOpen ? 'Open' : 'Closed'}</Button>
               </div>
               <div className="action-buttons">
                 <button type="button" className="icon-btn" onClick={() => openForm(svc)}><Edit2 size={16} /></button>
-                <button type="button" className="icon-btn" onClick={() => onUpdateServices(services.filter((item) => item.id !== svc.id))}><Trash2 size={16} /></button>
+                <button type="button" className="icon-btn" onClick={() => handleDelete(svc)}><Trash2 size={16} /></button>
               </div>
             </div>
           ))}

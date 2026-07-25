@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { createApp } from '../src/app.js';
+import { calculateWaitTime } from '../src/modules/time_estimation.js';
 
 let server;
 let baseUrl;
@@ -70,6 +71,12 @@ async function request(route, options = {}, token = null) {
   return { status: response.status, body };
 }
 
+test('wait-time rule multiplies people ahead by expected duration', () => {
+  assert.equal(calculateWaitTime(1, 10), 0);
+  assert.equal(calculateWaitTime(3, 10), 20);
+  assert.equal(calculateWaitTime(5, 15), 60);
+});
+
 test('user can join a queue and receives correct wait time', async () => {
   const payload = JSON.stringify({ serviceId });
   const res = await request('/api/queue/join', { method: 'POST', body: payload }, userToken);
@@ -78,6 +85,28 @@ test('user can join a queue and receives correct wait time', async () => {
   assert.equal(res.body.position, 1);
   assert.equal(res.body.estWait, 0); // 0 people ahead * 10 min
   assert.equal(res.body.entry.name, 'User');
+});
+
+test('returns the authenticated user wait estimate from the dedicated endpoint', async () => {
+  const res = await request(`/api/time-estimation/${serviceId}`, { method: 'GET' }, userToken);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.estimate.position, 1);
+  assert.equal(res.body.estimate.peopleAhead, 0);
+  assert.equal(res.body.estimate.expectedDuration, 10);
+  assert.equal(res.body.estimate.estimatedWait, 0);
+  assert.equal(res.body.estimate.inQueue, true);
+});
+
+test('user can restore their queue membership and view queue counts', async () => {
+  const mine = await request('/api/queue/mine', { method: 'GET' }, userToken);
+  assert.equal(mine.status, 200);
+  assert.equal(mine.body.queues.length, 1);
+  assert.equal(mine.body.queues[0].serviceId, serviceId);
+  assert.equal(mine.body.queues[0].position, 1);
+
+  const summary = await request('/api/queue/summary', { method: 'GET' }, userToken);
+  assert.equal(summary.status, 200);
+  assert.equal(summary.body.counts[serviceId], 1);
 });
 
 test('user cannot join the exact same queue twice', async () => {

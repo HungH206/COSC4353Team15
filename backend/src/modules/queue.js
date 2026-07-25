@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Router } from 'express';
+import { calculateWaitTime } from './time_estimation.js';
 
 class QueueStore {
   constructor(file) {
@@ -44,6 +45,37 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
     response.json({ queues: await queues.read() });
   });
 
+  // get the authenticated user's current queue memberships
+  router.get('/mine', auth.authenticate, async (request, response) => {
+    const allQueues = await queues.read();
+    const memberships = [];
+
+    for (const [serviceId, serviceQueue] of Object.entries(allQueues)) {
+      const index = serviceQueue.findIndex((entry) => entry.userId === request.user.id);
+      if (index === -1) continue;
+      const service = await serviceStore.find(serviceId);
+      memberships.push({
+        serviceId,
+        serviceName: service?.name ?? 'Unknown service',
+        position: index + 1,
+        estWait: calculateWaitTime(index + 1, service?.expectedDuration),
+        entry: serviceQueue[index],
+        queue: serviceQueue,
+      });
+    }
+
+    response.json({ queues: memberships });
+  });
+
+  router.get('/summary', auth.authenticate, async (_request, response) => {
+    const allQueues = await queues.read();
+    response.json({
+      counts: Object.fromEntries(
+        Object.entries(allQueues).map(([serviceId, serviceQueue]) => [serviceId, serviceQueue.length]),
+      ),
+    });
+  });
+
   // join a queue
   router.post('/join', auth.authenticate, async (request, response) => {
     const { serviceId } = request.body;
@@ -76,9 +108,9 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
     // trigger notification
     await notifier(request.user.id, `You successfully joined the queue for ${service.name}.`);
 
-    //calculate pisition and estimated wait time
+    // Calculate position and estimated wait using the shared estimation module.
     const position = allQueues[serviceId].length;
-    const estWait = (position - 1) * service.expectedDuration;
+    const estWait = calculateWaitTime(position, service.expectedDuration);
 
     response.status(200).json({ position, estWait, entry });
   });
@@ -98,7 +130,7 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
 
     const service = await serviceStore.find(serviceId);
     if (service) {
-      const waitMinutes = index * service.expectedDuration;
+      const waitMinutes = calculateWaitTime(index + 1, service.expectedDuration);
       // Trigger history log 
       await historyLogger(request.user.id, service.name, waitMinutes, 'left');
     }

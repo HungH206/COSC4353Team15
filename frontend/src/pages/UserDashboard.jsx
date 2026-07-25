@@ -46,7 +46,9 @@ export default function UserDashboard({ user, services, queues, notifs, activeQu
             latestNotifs.map((item) => (
               <div key={item.id} className="notification-item" style={{ marginBottom: '0.85rem' }}>
                 <p style={{ margin: 0 }}>{item.message}</p>
-                <p className="text-muted" style={{ margin: '0.45rem 0 0', fontSize: '0.85rem' }}>{item.time}</p>
+                <p className="text-muted" style={{ margin: '0.45rem 0 0', fontSize: '0.85rem' }}>
+                  {item.time || (item.createdAt ? new Date(item.createdAt).toLocaleString() : '')}
+                </p>
               </div>
             ))
           ) : (

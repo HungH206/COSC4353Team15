@@ -1,32 +1,37 @@
 // ADMIN QUEUE MANAGER PAGE
 // Created by: Hung Hoang, 7/9/2026
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Button from '../components/Button.jsx';
 import Badge from '../components/Badge.jsx';
-import { ChevronUp, ChevronDown, UserCheck, Users } from 'lucide-react';
+import { UserCheck, Users } from 'lucide-react';
 
-export default function AdminQueue({ services, queues, onUpdateQueues }) {
-  const openServices = services.filter((svc) => svc.isOpen);
+export default function AdminQueue({ services, queues, onServeNext }) {
+  const openServices = services.filter((service) => service.isOpen);
   const [activeServiceId, setActiveServiceId] = useState(openServices[0]?.id ?? '');
+  const [error, setError] = useState('');
+  const [serving, setServing] = useState(false);
+
+  useEffect(() => {
+    if (!openServices.some((service) => service.id === activeServiceId)) {
+      setActiveServiceId(openServices[0]?.id ?? '');
+    }
+  }, [activeServiceId, openServices]);
+
   const queue = queues[activeServiceId] || [];
-  const service = services.find((svc) => svc.id === activeServiceId);
+  const service = services.find((item) => item.id === activeServiceId);
 
-  const serveNext = () => {
+  const serveNext = async () => {
     if (!queue.length) return;
-    onUpdateQueues({ ...queues, [activeServiceId]: queue.slice(1) });
-  };
-
-  const moveEntry = (index, direction) => {
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= queue.length) return;
-    const updated = [...queue];
-    [updated[index], updated[nextIndex]] = [updated[nextIndex], updated[index]];
-    onUpdateQueues({ ...queues, [activeServiceId]: updated });
-  };
-
-  const removeEntry = (id) => {
-    onUpdateQueues({ ...queues, [activeServiceId]: queue.filter((item) => item.id !== id) });
+    setServing(true);
+    setError('');
+    try {
+      await onServeNext(activeServiceId);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setServing(false);
+    }
   };
 
   return (
@@ -34,20 +39,24 @@ export default function AdminQueue({ services, queues, onUpdateQueues }) {
       <div className="page-header space-between">
         <div>
           <h2>Queue Manager</h2>
-          <p className="subtitle">Reorder, remove, and serve people in each queue.</p>
+          <p className="subtitle">View each queue and serve users in arrival order.</p>
         </div>
-        <Button variant="primary" onClick={serveNext} disabled={!queue.length}><UserCheck size={14} /> Serve Next</Button>
+        <Button variant="primary" onClick={serveNext} disabled={!queue.length || serving}>
+          <UserCheck size={14} /> {serving ? 'Serving...' : 'Serve Next'}
+        </Button>
       </div>
 
+      {error && <div className="alert alert-error">{error}</div>}
+
       <div className="service-tabs">
-        {openServices.map((svc) => (
+        {openServices.map((item) => (
           <button
-            key={svc.id}
+            key={item.id}
             type="button"
-            className={`tab-button ${svc.id === activeServiceId ? 'tab-active' : ''}`}
-            onClick={() => setActiveServiceId(svc.id)}
+            className={`tab-button ${item.id === activeServiceId ? 'tab-active' : ''}`}
+            onClick={() => setActiveServiceId(item.id)}
           >
-            {svc.name} <span className="tab-count">{queues[svc.id]?.length ?? 0}</span>
+            {item.name} <span className="tab-count">{queues[item.id]?.length ?? 0}</span>
           </button>
         ))}
       </div>
@@ -57,7 +66,9 @@ export default function AdminQueue({ services, queues, onUpdateQueues }) {
           <div className="block-card-header">
             <div>
               <strong>{service.name}</strong>
-              <p className="text-muted">{queue.length} {queue.length === 1 ? 'person' : 'people'} · ~{queue.length * service.expectedDuration} min total wait</p>
+              <p className="text-muted">
+                {queue.length} {queue.length === 1 ? 'person' : 'people'} · ~{queue.length * service.expectedDuration} min total wait
+              </p>
             </div>
           </div>
           {queue.length === 0 ? (
@@ -74,12 +85,10 @@ export default function AdminQueue({ services, queues, onUpdateQueues }) {
                     <p>{entry.name}</p>
                     <p className="text-muted">Joined {entry.joinedAt}</p>
                   </div>
-                  <Badge text={entry.status === 'almost_ready' ? 'Almost Ready' : 'Waiting'} className={entry.status === 'almost_ready' ? 'badge-warning' : 'badge-muted'} />
-                  <div className="queue-actions">
-                    <button type="button" className="icon-btn" onClick={() => moveEntry(index, -1)} disabled={index === 0}><ChevronUp size={14} /></button>
-                  <button type="button" className="icon-btn" onClick={() => moveEntry(index, 1)} disabled={index === queue.length - 1}><ChevronDown size={14} /></button>
-                  <button type="button" className="icon-btn" onClick={() => removeEntry(entry.id)}>×</button>
-                  </div>
+                  <Badge
+                    text={entry.status === 'almost_ready' ? 'Almost Ready' : 'Waiting'}
+                    className={entry.status === 'almost_ready' ? 'badge-warning' : 'badge-muted'}
+                  />
                 </div>
               ))}
             </div>

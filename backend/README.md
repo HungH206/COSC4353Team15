@@ -27,6 +27,13 @@ The default base URL is `http://localhost:3000/api`.
 | `GET` | `/auth/admin-check` | Administrator | Verify role protection |
 | `GET` | `/health` | Public | Service health check |
 
+Wait-time estimates are available to authenticated users through
+`GET /time-estimation` and `GET /time-estimation/:serviceId`. The rule is:
+
+```text
+estimated wait = (position - 1) × expected service duration
+```
+
 Registration accepts `name`, `email`, and `password`. The API deliberately ignores a
 client-supplied role: public accounts are always assigned the `user` role.
 

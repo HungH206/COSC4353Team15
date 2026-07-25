@@ -41,6 +41,19 @@ class NotificationStore {
     return operation;
   }
 
+  async markRead(id, userId) {
+    const operation = this.writeQueue.then(async () => {
+      const notifications = await this.all();
+      const notification = notifications.find((item) => item.id === id && item.userId === userId);
+      if (!notification) return null;
+      notification.read = true;
+      await this.write(notifications);
+      return notification;
+    });
+    this.writeQueue = operation.catch(() => {});
+    return operation;
+  }
+
   async write(notifications) {
     const temporaryFile = `${this.file}.tmp`;
     await fs.writeFile(temporaryFile, `${JSON.stringify(notifications, null, 2)}\n`, 'utf8');
@@ -70,6 +83,16 @@ export async function createNotificationModule(config, auth) {
     try {
       const notifications = await store.forUser(request.user.id);
       response.json({ notifications });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/:id/read', auth.authenticate, async (request, response, next) => {
+    try {
+      const notification = await store.markRead(request.params.id, request.user.id);
+      if (!notification) return response.status(404).json({ error: 'Notification not found.' });
+      response.json({ notification });
     } catch (error) {
       next(error);
     }

@@ -78,21 +78,37 @@ test('user receives a notification when joining the queue', async () => {
   assert.match(notificationsRes.body.notifications[0].message, /joined the queue/i);
 });
 
+test('user can mark only their own notification as read', async () => {
+  const notificationsRes = await request('/api/notifications', { method: 'GET' }, userToken);
+  const notification = notificationsRes.body.notifications[0];
+  const readRes = await request(
+    `/api/notifications/${notification.id}/read`,
+    { method: 'PATCH' },
+    userToken,
+  );
+  assert.equal(readRes.status, 200);
+  assert.equal(readRes.body.notification.read, true);
+});
+
 test('next user receives a notification when the current user is served', async () => {
-  const secondUserRes = await fetch(`${baseUrl}/api/auth/register`, {
+  await fetch(`${baseUrl}/api/auth/register`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name: 'Second User', email: 'second@example.com', password: 'second-password' }),
   });
-  const secondUserToken = (await secondUserRes.json()).token;
+  const secondUserLogin = await fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'second@example.com', password: 'second-password' }),
+  });
+  const secondUserToken = (await secondUserLogin.json()).token;
 
   await request('/api/queue/join', { method: 'POST', body: JSON.stringify({ serviceId }) }, secondUserToken);
-  await request('/api/queue/join', { method: 'POST', body: JSON.stringify({ serviceId }) }, userToken);
   const serveRes = await request(`/api/queue/${serviceId}/serve`, { method: 'POST' }, adminToken);
 
   assert.equal(serveRes.status, 200);
 
-  const notificationsRes = await request('/api/notifications', { method: 'GET' }, userToken);
+  const notificationsRes = await request('/api/notifications', { method: 'GET' }, secondUserToken);
   assert.equal(notificationsRes.status, 200);
   assert.match(notificationsRes.body.notifications[0].message, /next/i);
 });
