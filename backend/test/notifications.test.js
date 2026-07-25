@@ -67,6 +67,15 @@ async function request(route, options = {}, token = null) {
   return { status: response.status, body };
 }
 
+// /api/auth/register does not log the user in, so tests that need a fresh
+// authenticated user have to register then log in separately.
+async function registerAndLogin(name, email, password) {
+  await request('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) });
+  const login = await request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+  return login.body.token;
+}
+
+
 test('user receives a notification when joining the queue', async () => {
   const res = await request('/api/queue/join', { method: 'POST', body: JSON.stringify({ serviceId }) }, userToken);
 
@@ -79,20 +88,50 @@ test('user receives a notification when joining the queue', async () => {
 });
 
 test('next user receives a notification when the current user is served', async () => {
-  const secondUserRes = await fetch(`${baseUrl}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: 'Second User', email: 'second@example.com', password: 'second-password' }),
-  });
-  const secondUserToken = (await secondUserRes.json()).token;
+  // isolated service + fresh users so this test doesn't depend on queue state left behind by other tests
+  const isolatedServiceId = await createService('Serve Notification Service');
+  const firstToken = await registerAndLogin('First In Line', 'first-in-line@example.com', 'first-password');
+  const secondToken = await registerAndLogin('Second In Line', 'second-in-line@example.com', 'second-password');
 
-  await request('/api/queue/join', { method: 'POST', body: JSON.stringify({ serviceId }) }, secondUserToken);
-  await request('/api/queue/join', { method: 'POST', body: JSON.stringify({ serviceId }) }, userToken);
-  const serveRes = await request(`/api/queue/${serviceId}/serve`, { method: 'POST' }, adminToken);
+  await request('/api/queue/join', { method: 'POST', body: JSON.stringify({ serviceId: isolatedServiceId }) }, firstToken);
+  await request('/api/queue/join', { method: 'POST', body: JSON.stringify({ serviceId: isolatedServiceId }) }, secondToken);
 
+  const serveRes = await request(`/api/queue/${isolatedServiceId}/serve`, { method: 'POST' }, adminToken);
   assert.equal(serveRes.status, 200);
 
-  const notificationsRes = await request('/api/notifications', { method: 'GET' }, userToken);
+  //#1 user was served and removed; #2 user is at the front is notified
+  const notificationsRes = await request('/api/notifications', { method: 'GET' }, secondToken);
   assert.equal(notificationsRes.status, 200);
   assert.match(notificationsRes.body.notifications[0].message, /next/i);
+});
+
+test('rejects requests for notifications without a valid token', async () => {
+  const noToken = await request('/api/notifications', { method: 'GET' });
+  assert.equal(noToken.status, 401);
+
+  const badToken = await request('/api/notifications', { method: 'GET' }, 'not-a-real-token');
+  assert.equal(badToken.status, 401);
+});
+
+test('returns an empty list for a user with no notification history', async () => {
+  const freshToken = await registerAndLogin('Fresh User', 'fresh-user@example.com', 'fresh-password');
+
+  const notificationsRes = await request('/api/notifications', { method: 'GET' }, freshToken);
+  assert.equal(notificationsRes.status, 200);
+  assert.deepEqual(notificationsRes.body.notifications, []);
+});
+
+test('does not leak one user\'s notifications to another user', async () => {
+  const isolatedServiceId = await createService('Isolation Test Service');
+  const activeToken = await registerAndLogin('Active User', 'active-user@example.com', 'active-password');
+  const bystanderToken = await registerAndLogin('Bystander User', 'bystander-user@example.com', 'bystander-password');
+
+  await request('/api/queue/join', { method: 'POST', body: JSON.stringify({ serviceId: isolatedServiceId }) }, activeToken);
+
+  const activeNotifications = await request('/api/notifications', { method: 'GET' }, activeToken);
+  assert.equal(activeNotifications.body.notifications.length, 1);
+
+  const bystanderNotifications = await request('/api/notifications', { method: 'GET' }, bystanderToken);
+  assert.equal(bystanderNotifications.status, 200);
+  assert.deepEqual(bystanderNotifications.body.notifications, []);
 });
