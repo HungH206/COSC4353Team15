@@ -1,69 +1,90 @@
 import { randomUUID } from 'node:crypto';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { Router } from 'express';
 
+function mapToCamelCase(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    expectedDuration: row.expectedduration, 
+    priority: row.priority,
+    createdAt: row.createdat,             
+    isOpen: true 
+  };
+}
+
 class ServiceStore {
-  constructor(file) {
-    this.file = file;
-    this.writeQueue = Promise.resolve();
+  constructor(db) {
+    this.db = db;
   }
 
   async initialize() {
-    await fs.mkdir(path.dirname(this.file), { recursive: true });
-    try {
-      await fs.access(this.file);
-    } catch {
-      await this.write([]);
-    }
+    return Promise.resolve();
   }
 
   async all() {
-    return JSON.parse(await fs.readFile(this.file, 'utf8'));
+    const { data, error } = await this.db.from('services').select('*');
+    if (error) throw new Error(`Database error: ${error.message}`);
+    return data.map(mapToCamelCase);
   }
 
   async find(id) {
-    return (await this.all()).find((svc) => svc.id === id) ?? null;
+    const { data, error } = await this.db
+      .from('services')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle(); 
+    
+    if (error) throw new Error(`Database error: ${error.message}`);
+    return mapToCamelCase(data);
   }
 
   async create(service) {
-    const operation = this.writeQueue.then(async () => {
-      const services = await this.all();
-      services.push(service);
-      await this.write(services);
-      return service;
-    });
-    this.writeQueue = operation.catch(() => {});
-    return operation;
+    const insertData = {
+      id: service.id,
+      name: service.name,
+      description: service.description,
+      expectedduration: service.expectedDuration,
+      priority: service.priority,
+      createdat: service.createdAt
+    };
+
+    const { data, error } = await this.db
+      .from('services')
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) throw new Error(`Database error: ${error.message}`);
+    return mapToCamelCase(data);
   }
 
   async update(id, updates) {
-    const operation = this.writeQueue.then(async () => {
-      const services = await this.all();
-      const index = services.findIndex((s) => s.id === id);
-      if (index === -1) return null;
-      services[index] = { ...services[index], ...updates };
-      await this.write(services);
-      return services[index];
-    });
-    this.writeQueue = operation.catch(() => {});
-    return operation;
+    const updateData = {};
+    if (updates.name !== undefined) updateData.name = updates.name;
+    if (updates.description !== undefined) updateData.description = updates.description;
+    if (updates.expectedDuration !== undefined) updateData.expectedduration = updates.expectedDuration;
+    if (updates.priority !== undefined) updateData.priority = updates.priority;
+
+    const { data, error } = await this.db
+      .from('services')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+
+    if (error) throw new Error(`Database error: ${error.message}`);
+    return mapToCamelCase(data);
   }
 
   async delete(id) {
-    const operation = this.writeQueue.then(async () => {
-      let services = await this.all();
-      services = services.filter((s) => s.id !== id);
-      await this.write(services);
-    });
-    this.writeQueue = operation.catch(() => {});
-    return operation;
-  }
-
-  async write(services) {
-    const temporaryFile = `${this.file}.tmp`;
-    await fs.writeFile(temporaryFile, `${JSON.stringify(services, null, 2)}\n`, 'utf8');
-    await fs.rename(temporaryFile, this.file);
+    const { error } = await this.db
+      .from('services')
+      .delete()
+      .eq('id', id);
+      
+    if (error) throw new Error(`Database error: ${error.message}`);
   }
 }
 
@@ -94,15 +115,19 @@ function validateService(body = {}) {
 }
 
 export async function createServiceModule(config, auth) {
-  const store = new ServiceStore(config.servicesFile);
+  const store = new ServiceStore(config.db);
   await store.initialize();
 
   const router = Router();
 
   // Any authenticated user can view services
-  router.get('/', auth.authenticate, async (_request, response) => {
-    const services = await store.all();
-    response.json({ services });
+  router.get('/', auth.authenticate, async (_request, response, next) => {
+    try {
+      const services = await store.all();
+      response.json({ services });
+    } catch (error) {
+      next(error);
+    }
   });
 
   // Only admins can create a service

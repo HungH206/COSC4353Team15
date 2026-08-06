@@ -1,41 +1,164 @@
 import { randomUUID } from 'node:crypto';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { Router } from 'express';
 import { calculateWaitTime } from './time_estimation.js';
 
 class QueueStore {
-  constructor(file) {
-    this.file = file;
-    this.writeQueue = Promise.resolve();
+  constructor(db) {
+    this.db = db;
   }
 
   async initialize() {
-    await fs.mkdir(path.dirname(this.file), { recursive: true });
-    try {
-      await fs.access(this.file);
-    } catch {
-      await this.write({});
+    return Promise.resolve();
+  }
+
+  async _getOpenQueue(serviceId) {
+    let { data: queue } = await this.db
+      .from('queue')
+      .select('*')
+      .eq('serviceid', serviceId)
+      .eq('status', 'open')
+      .maybeSingle();
+
+    if (!queue) {
+      const { data: newQueue, error } = await this.db.from('queue').insert({
+        id: randomUUID(),
+        serviceid: serviceId,
+        status: 'open',
+        createdat: new Date().toISOString()
+      }).select().single();
+      
+      if (error) throw new Error(`DB Error (Create Queue): ${error.message}`);
+      queue = newQueue;
     }
+    return queue;
+  }
+
+  async _getQueueEntries(queueId) {
+    const { data: entries, error } = await this.db
+      .from('queueentry')
+      .select('id, queueid, userid, position, jointime, status')
+      .eq('queueid', queueId)
+      .in('status', ['waiting', 'almost_ready'])
+      .order('position', { ascending: true });
+      
+    if (error) throw new Error(`DB Error (Get Entries): ${error.message}`);
+
+    return Promise.all(entries.map(async (e) => {
+      // Fetch the user's name from the userprofile table
+      const { data: profile } = await this.db
+        .from('userprofile')
+        .select('name')
+        .eq('userid', e.userid)
+        .maybeSingle();
+
+      return {
+        id: e.id,
+        userId: e.userid,
+        name: profile?.name || 'Unknown User', // Fallback just in case profile isn't set up yet
+        joinedAt: new Date(e.jointime).toLocaleTimeString(),
+        status: e.status,
+        position: e.position
+      };
+    }));
   }
 
   async read() {
-    return JSON.parse(await fs.readFile(this.file, 'utf8'));
+    const { data: queues, error } = await this.db.from('queue').select('*').eq('status', 'open');
+    if (error) throw new Error(`DB Error (Read Queues): ${error.message}`);
+
+    const allQueues = {};
+    for (const q of queues) {
+      allQueues[q.serviceid] = await this._getQueueEntries(q.id);
+    }
+    return allQueues;
   }
 
-  async write(data) {
-    const operation = this.writeQueue.then(async () => {
-      const temporaryFile = `${this.file}.tmp`;
-      await fs.writeFile(temporaryFile, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
-      await fs.rename(temporaryFile, this.file);
-    });
-    this.writeQueue = operation.catch(() => {});
-    return operation;
+  async joinQueue(serviceId, user) {
+    const queue = await this._getOpenQueue(serviceId);
+    const entries = await this._getQueueEntries(queue.id);
+
+    if (entries.some(e => e.userId === user.id)) {
+      throw new Error('You are already in this queue.');
+    }
+
+    const position = entries.length + 1;
+    const insertData = {
+      id: randomUUID(),
+      queueid: queue.id,
+      userid: user.id,
+      position: position,
+      jointime: new Date().toISOString(),
+      status: 'waiting'
+    };
+
+    const { data, error } = await this.db.from('queueentry').insert(insertData).select().single();
+    if (error) throw new Error(`DB Error (Join): ${error.message}`);
+
+    return {
+      id: data.id,
+      userId: data.userid,
+      name: user.name,
+      joinedAt: new Date(data.jointime).toLocaleTimeString(),
+      status: data.status,
+      position: data.position
+    };
+  }
+
+  async leaveQueue(serviceId, userId) {
+    const queue = await this._getOpenQueue(serviceId);
+    const entries = await this._getQueueEntries(queue.id);
+
+    const entryIndex = entries.findIndex(e => e.userId === userId);
+    if (entryIndex === -1) throw new Error('Not in queue.');
+
+    const entryToCancel = entries[entryIndex];
+
+    // Mark the leaving user as canceled
+    await this.db.from('queueentry').update({ status: 'canceled' }).eq('id', entryToCancel.id);
+
+    // Shift the positions of everyone who was behind them up by 1
+    const entriesToShift = entries.slice(entryIndex + 1);
+    for (const e of entriesToShift) {
+      await this.db.from('queueentry').update({ position: e.position - 1 }).eq('id', e.id);
+    }
+
+    return entryIndex; // Returning the old index so the router can calculate wait time
+  }
+
+  async serveNext(serviceId) {
+    const queue = await this._getOpenQueue(serviceId);
+    const entries = await this._getQueueEntries(queue.id);
+
+    if (entries.length === 0) throw new Error('Queue is empty.');
+
+    const servedUser = entries[0];
+
+    // Mark the first person in line as served
+    await this.db.from('queueentry').update({ status: 'served' }).eq('id', servedUser.id);
+
+    // Shift everyone else up by 1
+    const remaining = entries.slice(1);
+    for (let i = 0; i < remaining.length; i++) {
+      const newPos = remaining[i].position - 1;
+      const newStatus = newPos === 1 ? 'almost_ready' : remaining[i].status;
+      
+      await this.db.from('queueentry')
+        .update({ position: newPos, status: newStatus })
+        .eq('id', remaining[i].id);
+        
+      remaining[i].position = newPos;
+      remaining[i].status = newStatus;
+    }
+
+    return { 
+      servedUser, 
+      nextUser: remaining.length > 0 ? remaining[0] : null 
+    };
   }
 }
 
 export async function createQueueModule(config, auth, serviceStore, historyLogger, notifier) {
-  const queues = new QueueStore(config.queuesFile);
+  const queues = new QueueStore(config.db);
   await queues.initialize();
 
   const router = Router();
@@ -67,6 +190,7 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
     response.json({ queues: memberships });
   });
 
+  // get queue counts
   router.get('/summary', auth.authenticate, async (_request, response) => {
     const allQueues = await queues.read();
     response.json({
@@ -86,89 +210,54 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
       return response.status(400).json({ error: 'Service is unavailable or closed.' });
     }
 
-    const allQueues = await queues.read();
-    if (!allQueues[serviceId]) allQueues[serviceId] = [];
+    try {
+      const entry = await queues.joinQueue(serviceId, request.user);
+      const estWait = calculateWaitTime(entry.position, service.expectedDuration);
 
-    // check if user is already in this queue
-    if (allQueues[serviceId].some((entry) => entry.userId === request.user.id)) {
-      return response.status(400).json({ error: 'You are already in this queue.' });
+      await notifier(request.user.id, `You successfully joined the queue for ${service.name}.`);
+      response.status(200).json({ position: entry.position, estWait, entry });
+    } catch (error) {
+      response.status(400).json({ error: error.message });
     }
-
-    const entry = {
-      id: randomUUID(),
-      userId: request.user.id,
-      name: request.user.name,
-      joinedAt: new Date().toLocaleTimeString(),
-      status: 'waiting'
-    };
-
-    allQueues[serviceId].push(entry);
-    await queues.write(allQueues);
-    
-    // trigger notification
-    await notifier(request.user.id, `You successfully joined the queue for ${service.name}.`);
-
-    // Calculate position and estimated wait using the shared estimation module.
-    const position = allQueues[serviceId].length;
-    const estWait = calculateWaitTime(position, service.expectedDuration);
-
-    response.status(200).json({ position, estWait, entry });
   });
 
   // leave a queue
   router.post('/leave', auth.authenticate, async (request, response) => {
     const { serviceId } = request.body;
-    const allQueues = await queues.read();
-    const serviceQueue = allQueues[serviceId] || [];
-
-    const index = serviceQueue.findIndex(e => e.userId === request.user.id);
-    if (index === -1) return response.status(400).json({ error: 'Not in queue.' });
-
-    serviceQueue.splice(index, 1);
-    allQueues[serviceId] = serviceQueue;
-    await queues.write(allQueues);
-
-    const service = await serviceStore.find(serviceId);
-    if (service) {
-      const waitMinutes = calculateWaitTime(index + 1, service.expectedDuration);
-      // Trigger history log 
-      await historyLogger(request.user.id, service.name, waitMinutes, 'left');
+    try {
+      const oldIndex = await queues.leaveQueue(serviceId, request.user.id);
+      
+      const service = await serviceStore.find(serviceId);
+      if (service) {
+        const waitMinutes = calculateWaitTime(oldIndex + 1, service.expectedDuration);
+        await historyLogger(request.user.id, service.name, waitMinutes, 'left');
+      }
+      response.status(200).json({ message: 'Left queue successfully.' });
+    } catch (error) {
+      response.status(400).json({ error: error.message });
     }
-
-    response.status(200).json({ message: 'Left queue successfully.' });
   });
 
   // admin serves the next person
   router.post('/:serviceId/serve', auth.authenticate, auth.requireAdmin, async (request, response) => {
     const { serviceId } = request.params;
-    const allQueues = await queues.read();
-    const serviceQueue = allQueues[serviceId] || [];
-
-    if (serviceQueue.length === 0) {
-      return response.status(400).json({ error: 'Queue is empty.' });
-    }
-
-    const servedUser = serviceQueue.shift(); // Remove first person
-    allQueues[serviceId] = serviceQueue;
-    await queues.write(allQueues);
-
-    const service = await serviceStore.find(serviceId);
-    if (service) {
-      // Trigger history log 
-      await historyLogger(servedUser.userId, service.name, service.expectedDuration, 'served');
-    }
-
-    // Notify the next person that they are almost ready
-    if (serviceQueue.length > 0) {
-      const nextUser = serviceQueue[0];
-      nextUser.status = 'almost_ready';
-      await queues.write(allQueues);
+    
+    try {
+      const { servedUser, nextUser } = await queues.serveNext(serviceId);
       
-      // Trigger notification
-      await notifier(nextUser.userId, `You are next for ${service.name}! Please head to the counter.`);
-    }
+      const service = await serviceStore.find(serviceId);
+      if (service) {
+        await historyLogger(servedUser.userId, service.name, service.expectedDuration, 'served');
+      }
 
-    response.status(200).json({ served: servedUser });
+      if (nextUser) {
+        await notifier(nextUser.userId, `You are next for ${service?.name || 'the service'}! Please head to the counter.`);
+      }
+
+      response.status(200).json({ served: servedUser });
+    } catch (error) {
+      response.status(400).json({ error: error.message });
+    }
   });
 
   return { router, store: queues };

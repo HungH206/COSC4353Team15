@@ -13,17 +13,137 @@ let adminToken;
 let userToken;
 let serviceId;
 
+// --- IN-MEMORY MOCK DATABASE SETUP ---
+const mockTables = {
+  services: [],
+  queue: [],
+  queueentry: [],
+  userprofile: []
+};
+
+function createMockDb() {
+  return {
+    from: (tableName) => {
+      if (!mockTables[tableName]) {
+        mockTables[tableName] = [];
+      }
+
+      const filters = [];
+      let sortCol = null;
+      let sortAsc = true;
+
+      const builder = {
+        select: () => builder,
+        eq: (col, val) => {
+          filters.push((row) => row[col] === val);
+          return builder;
+        },
+        in: (col, valArray) => {
+          filters.push((row) => valArray.includes(row[col]));
+          return builder;
+        },
+        order: (col, { ascending = true } = {}) => {
+          sortCol = col;
+          sortAsc = ascending;
+          return builder;
+        },
+        insert: (data) => {
+          const items = Array.isArray(data) ? data : [data];
+          mockTables[tableName].push(...items);
+          const inserted = Array.isArray(data) ? items : items[0];
+          return {
+            select: () => ({
+              single: async () => ({ data: inserted, error: null }),
+              maybeSingle: async () => ({ data: inserted, error: null })
+            }),
+            then: (resolve) => resolve({ data: inserted, error: null })
+          };
+        },
+        update: (updateData) => {
+          return {
+            eq: (col, val) => {
+              filters.push((row) => row[col] === val);
+              const targetRows = mockTables[tableName].filter((row) =>
+                filters.every((f) => f(row))
+              );
+              targetRows.forEach((row) => Object.assign(row, updateData));
+              return {
+                select: () => ({
+                  maybeSingle: async () => ({
+                    data: targetRows[0] || null,
+                    error: null
+                  }),
+                  single: async () => ({ data: targetRows[0] || null, error: null })
+                }),
+                then: (resolve) => resolve({ data: targetRows, error: null })
+              };
+            }
+          };
+        },
+        delete: () => ({
+          eq: async (col, val) => {
+            mockTables[tableName] = mockTables[tableName].filter(
+              (row) => row[col] !== val
+            );
+            return { error: null };
+          }
+        }),
+        maybeSingle: async () => {
+          const filtered = mockTables[tableName].filter((row) =>
+            filters.every((f) => f(row))
+          );
+          let result = filtered[0] || null;
+          if (!result && tableName === 'userprofile') {
+            result = { name: 'User' };
+          }
+          return { data: result, error: null };
+        },
+        single: async () => {
+          const filtered = mockTables[tableName].filter((row) =>
+            filters.every((f) => f(row))
+          );
+          let result = filtered[0] || null;
+          if (!result && tableName === 'userprofile') {
+            result = { name: 'User' };
+          }
+          return { data: result, error: null };
+        },
+        then: (resolve) => {
+          const filtered = mockTables[tableName].filter((row) =>
+            filters.every((f) => f(row))
+          );
+          if (sortCol) {
+            filtered.sort((a, b) => {
+              if (a[sortCol] < b[sortCol]) return sortAsc ? -1 : 1;
+              if (a[sortCol] > b[sortCol]) return sortAsc ? 1 : -1;
+              return 0;
+            });
+          }
+          resolve({ data: filtered, error: null });
+        }
+      };
+
+      return builder;
+    }
+  };
+}
+
+const mockDb = createMockDb();
+
 before(async () => {
   temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'queuesmart-queue-'));
   
   const app = await createApp({
     jwtSecret: 'test-secret-that-is-at-least-32-characters',
     tokenTtlSeconds: 3600,
+    supabaseUrl: 'https://fake-project.supabase.co',
+    supabaseKey: 'fake-test-key-12345',
     dataFile: path.join(temporaryDirectory, 'users.json'),
     servicesFile: path.join(temporaryDirectory, 'services.json'),
     queuesFile: path.join(temporaryDirectory, 'queues.json'),
     historyFile: path.join(temporaryDirectory, 'history.json'),
     notificationsFile: path.join(temporaryDirectory, 'notifications.json'),
+    db: mockDb,
     admin: { name: 'Admin', email: 'admin@example.com', password: 'admin-password' },
     demoUser: { name: 'User', email: 'user@example.com', password: 'user-password' },
   });

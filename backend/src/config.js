@@ -15,6 +15,9 @@ export function loadConfig(overrides = {}) {
     jwtSecret: process.env.JWT_SECRET,
     tokenTtlSeconds: positiveInteger(process.env.TOKEN_TTL_SECONDS, 3600),
 
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseKey: process.env.SUPABASE_KEY,
+
     dataFile: path.resolve(backendRoot, process.env.DATA_FILE ?? 'data/users.json'),
     servicesFile: path.resolve(backendRoot, process.env.SERVICES_FILE ?? 'data/services.json'),
     queuesFile: path.resolve(backendRoot, process.env.QUEUES_FILE ?? 'data/queues.json'),

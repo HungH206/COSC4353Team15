@@ -11,16 +11,75 @@ let temporaryDirectory;
 let adminToken;
 let userToken;
 
+const mockServicesTable = [];
+
+const mockDb = {
+  from: (table) => ({
+    select: (columns) => {
+      return {
+        // Handles: await db.from('services').select('*').eq('id', id).maybeSingle()
+        eq: (col, val) => ({
+          maybeSingle: async () => {
+            const found = mockServicesTable.find(row => row[col] === val);
+            return { data: found || null, error: null };
+          }
+        }),
+        // Handles: await db.from('services').select('*')
+        then: (resolve) => resolve({ data: mockServicesTable, error: null })
+      };
+    },
+    insert: (data) => ({
+      // Handles: await db.from('services').insert(data).select().single()
+      select: () => ({
+        single: async () => {
+          mockServicesTable.push(data);
+          return { data: data, error: null };
+        }
+      })
+    }),
+    update: (data) => ({
+      // Handles: await db.from('services').update(data).eq('id', id).select().maybeSingle()
+      eq: (col, val) => ({
+        select: () => ({
+          maybeSingle: async () => {
+            const index = mockServicesTable.findIndex(row => row[col] === val);
+            if (index > -1) {
+              mockServicesTable[index] = { ...mockServicesTable[index], ...data };
+              return { data: mockServicesTable[index], error: null };
+            }
+            return { data: null, error: null };
+          }
+        })
+      })
+    }),
+    delete: () => ({
+      // Handles: await db.from('services').delete().eq('id', id)
+      eq: async (col, val) => {
+        const index = mockServicesTable.findIndex(row => row[col] === val);
+        if (index > -1) mockServicesTable.splice(index, 1);
+        return { error: null };
+      }
+    })
+  })
+};
+
 before(async () => {
   temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'queuesmart-services-'));
+
   const app = await createApp({
     jwtSecret: 'test-secret-that-is-at-least-32-characters',
     tokenTtlSeconds: 3600,
+
+    supabaseUrl: 'https://fake-project.supabase.co',
+    supabaseKey: 'fake-test-key-12345',
+    
     dataFile: path.join(temporaryDirectory, 'users.json'),
     servicesFile: path.join(temporaryDirectory, 'services.json'),
     queuesFile: path.join(temporaryDirectory, 'queues.json'),
     historyFile: path.join(temporaryDirectory, 'history.json'),
     notificationsFile: path.join(temporaryDirectory, 'notifications.json'),
+
+    db: mockDb,
     
     admin: { 
       name: 'Admin', 

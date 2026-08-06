@@ -1,5 +1,8 @@
 import cors from 'cors';
 import express from 'express';
+
+import { getDbClient } from './db.js';
+
 import { createAuthModule } from './modules/auth.js';
 import { createServiceModule } from './modules/services.js';
 import { createQueueModule } from './modules/queue.js';
@@ -7,11 +10,14 @@ import { createNotificationModule } from './modules/notifs.js';
 import { createHistoryModule } from './modules/history.js';
 import { createTimeEstimationModule } from './modules/time_estimation.js';
 
+
 export async function createApp(config) {
   const app = express();
   app.disable('x-powered-by');
   app.use(cors());
   app.use(express.json({ limit: '20kb' }));
+
+  config.db = config.db || await getDbClient(config);
 
   const auth = await createAuthModule(config);
   const services = await createServiceModule(config, auth);
