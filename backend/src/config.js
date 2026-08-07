@@ -1,8 +1,9 @@
 import path from 'node:path';
+import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
-import 'dotenv/config';
 
 const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+dotenv.config({ path: path.resolve(backendRoot, '.env') });
 
 function positiveInteger(value, fallback) {
   const parsed = Number.parseInt(value ?? '', 10);
@@ -12,6 +13,7 @@ function positiveInteger(value, fallback) {
 export function loadConfig(overrides = {}) {
   const config = {
     port: positiveInteger(process.env.PORT, 3000),
+    databaseUrl: process.env.DATABASE_URL,
     jwtSecret: process.env.JWT_SECRET,
     tokenTtlSeconds: positiveInteger(process.env.TOKEN_TTL_SECONDS, 3600),
 
@@ -23,7 +25,7 @@ export function loadConfig(overrides = {}) {
     queuesFile: path.resolve(backendRoot, process.env.QUEUES_FILE ?? 'data/queues.json'),
     historyFile: path.resolve(backendRoot, process.env.HISTORY_FILE ?? 'data/history.json'),
     notificationsFile: path.resolve(backendRoot, process.env.NOTIFICATIONS_FILE ?? 'data/notifications.json'),
-    
+
     admin: {
       name: process.env.ADMIN_NAME,
       email: process.env.ADMIN_EMAIL,
@@ -38,8 +40,13 @@ export function loadConfig(overrides = {}) {
   };
 
   if (!config.jwtSecret || config.jwtSecret.length < 32) {
-    throw new Error('JWT_SECRET must be at least 32 characters long.');
+        throw new Error('JWT_SECRET must be at least 32 characters long.');
+  }
+  if (!config.databaseUrl) {
+    throw new Error('DATABASE_URL is required in .env');
   }
 
   return config;
 }
+
+export default loadConfig();
