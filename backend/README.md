@@ -13,7 +13,11 @@ router that `app.js` mounts under `/api`.
 1. Run `npm install`.
 2. Copy `.env.example` to `.env`.
 3. Replace `JWT_SECRET` and the optional administrator password.
-4. Run `npm run dev`.
+4. For Supabase/Postgres mode, set `USE_DATABASE=true`, `SUPABASE_URL`, and
+   `SUPABASE_SERVICE_ROLE_KEY`.
+5. Initialize tables by either running `npm run db:init` with `DATABASE_URL`
+   set, or by running `sql/001_core_tables.sql` in the Supabase SQL editor.
+6. Run `npm run dev`.
 
 The default base URL is `http://localhost:3000/api`.
 
@@ -43,9 +47,20 @@ Send authenticated requests with:
 Authorization: Bearer <token>
 ```
 
-User data is stored in `data/users.json` for the initial project phase. The file is
-excluded from Git. A database-backed repository can replace it without changing the
-routes or authentication service.
+With `USE_DATABASE=true`, the backend stores application data in the Supabase
+Postgres tables `usercredentials`, `userprofile`, `service`, `queue`,
+`queueentry`, and `history`. Notifications are stored in `history` rows with
+`outcome = null`. Passwords are salted `scrypt` hashes. With database mode
+disabled, local JSON files under `data/` remain the fallback development
+storage.
+
+The Supabase client lives in `src/supabase.js`. `src/app.js` creates it when
+`USE_DATABASE=true`, and the backend modules use that client to query Supabase
+tables.
+
+Use the Supabase `service_role` key in `backend/.env` so backend inserts and
+updates are not blocked by Row Level Security. Never expose that key in frontend
+Vite environment variables.
 
 For development, the backend seeds `user1@example.com` with password `password123`
 as a regular demonstration user. The `DEMO_USER_*` environment variables can

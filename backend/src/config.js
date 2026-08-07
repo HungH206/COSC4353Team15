@@ -18,7 +18,8 @@ export function loadConfig(overrides = {}) {
     tokenTtlSeconds: positiveInteger(process.env.TOKEN_TTL_SECONDS, 3600),
 
     supabaseUrl: process.env.SUPABASE_URL,
-    supabaseKey: process.env.SUPABASE_KEY,
+    supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_KEY,
+    useDatabase: process.env.USE_DATABASE === 'true',
 
     dataFile: path.resolve(backendRoot, process.env.DATA_FILE ?? 'data/users.json'),
     servicesFile: path.resolve(backendRoot, process.env.SERVICES_FILE ?? 'data/services.json'),
@@ -40,10 +41,10 @@ export function loadConfig(overrides = {}) {
   };
 
   if (!config.jwtSecret || config.jwtSecret.length < 32) {
-        throw new Error('JWT_SECRET must be at least 32 characters long.');
+    throw new Error('JWT_SECRET must be at least 32 characters long.');
   }
-  if (!config.databaseUrl) {
-    throw new Error('DATABASE_URL is required in .env');
+  if (config.useDatabase && (!config.supabaseUrl || !config.supabaseKey)) {
+    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required when USE_DATABASE=true.');
   }
 
   return config;

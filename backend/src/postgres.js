@@ -1,6 +1,11 @@
 import pkg from 'pg';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const { Pool } = pkg;
+const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const schemaFile = path.resolve(backendRoot, 'sql/001_core_tables.sql');
 
 let pool = null;
 
@@ -26,6 +31,14 @@ export async function all(sql, params = []) {
   return result.rows;
 }
 
+export async function initializeDatabaseSchema() {
+  const schema = await fs.readFile(schemaFile, 'utf8');
+  await query(schema);
+}
+
 export async function closePool() {
-  if (pool) await pool.end();
+  if (pool) {
+    await pool.end();
+    pool = null;
+  }
 }

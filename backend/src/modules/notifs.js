@@ -61,8 +61,83 @@ class NotificationStore {
   }
 }
 
+// Database notification mapping and store implementation
+
+function mapDatabaseNotification(notification) {
+  if (!notification) return null;
+  return {
+    id: notification.id,
+    userId: notification.userid,
+    message: notification.message,
+    read: notification.status === 'viewed',
+    createdAt: notification.createdat,
+  };
+}
+
+class DatabaseNotificationStore {
+  constructor(db) {
+    this.db = db;
+  }
+
+  async initialize() {
+    return Promise.resolve();
+  }
+
+  async forUser(userId) {
+    const { data, error } = await this.db
+      .from('history')
+      .select('*')
+      .eq('userid', userId)
+      .order('createdat', { ascending: false });
+
+    if (error) throw new Error(`Database error: ${error.message}`);
+    return data
+      .filter((notification) => !notification.outcome)
+      .map(mapDatabaseNotification);
+  }
+
+  async create(notification) {
+    const insertData = {
+      id: notification.id,
+      userid: notification.userId,
+      message: notification.message,
+      status: notification.read ? 'viewed' : 'sent',
+      createdat: notification.createdAt,
+      outcome: null,
+    };
+
+    const { data, error } = await this.db
+      .from('history')
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) throw new Error(`Database error: ${error.message}`);
+    return mapDatabaseNotification(data);
+  }
+
+  async markRead(id, userId) {
+    const { data, error } = await this.db
+      .from('history')
+      .update({ status: 'viewed' })
+      .eq('id', id)
+      .eq('userid', userId)
+      .select()
+      .maybeSingle();
+
+    if (error) throw new Error(`Database error: ${error.message}`);
+    return mapDatabaseNotification(data);
+  }
+}
+
+function createStore(config) {
+  if (config.useDatabase && config.db) return new DatabaseNotificationStore(config.db);
+  return new NotificationStore(config.notificationsFile);
+} // end of database notification store
+
+// Create the notification module with router and store
 export async function createNotificationModule(config, auth) {
-  const store = new NotificationStore(config.notificationsFile);
+  const store = createStore(config);
   await store.initialize();
 
   //passed into queue.js as `notifier`

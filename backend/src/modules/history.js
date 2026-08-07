@@ -56,8 +56,68 @@ class HistoryStore {
   }
 }
 
+function mapDatabaseHistory(record) {
+  if (!record) return null;
+  return {
+    id: record.id,
+    userId: record.userid,
+    serviceName: record.service_name ?? record.message?.replace(/^(Served by|Left) /, '').replace(/\.$/, ''),
+    waitMinutes: record.wait_minutes ?? 0,
+    outcome: record.outcome,
+    createdAt: record.createdat,
+  };
+}
+
+class DatabaseHistoryStore {
+  constructor(db) {
+    this.db = db;
+  }
+
+  async initialize() {
+    return Promise.resolve();
+  }
+
+  async forUser(userId) {
+    const { data, error } = await this.db
+      .from('history')
+      .select('*')
+      .eq('userid', userId)
+      .order('createdat', { ascending: false });
+
+    if (error) throw new Error(`Database error: ${error.message}`);
+    return data
+      .filter((record) => ['served', 'left'].includes(record.outcome))
+      .map(mapDatabaseHistory);
+  }
+
+  async create(record) {
+    const insertData = {
+      id: record.id,
+      userid: record.userId,
+      message: `${record.outcome === 'served' ? 'Served by' : 'Left'} ${record.serviceName}.`,
+      status: 'viewed',
+      outcome: record.outcome,
+      createdat: record.createdAt,
+    };
+
+    const { data, error } = await this.db
+      .from('history')
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) throw new Error(`Database error: ${error.message}`);
+    return mapDatabaseHistory(data);
+  }
+}
+
+function createStore(config) {
+  if (config.useDatabase && config.db) return new DatabaseHistoryStore(config.db);
+  return new HistoryStore(config.historyFile);
+}
+
 export async function createHistoryModule(config, auth) {
-  const store = new HistoryStore(config.historyFile);
+  const store = createStore(config);
   await store.initialize();
 
   /*

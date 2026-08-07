@@ -7,6 +7,8 @@ import { Router } from 'express';
 const scrypt = promisify(scryptCallback);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const KEY_LENGTH = 64;
+const USER_CREDENTIALS_TABLE = 'usercredentials';
+const USER_PROFILE_TABLE = 'userprofile';
 
 function publicUser(user) {
   return {
@@ -132,8 +134,90 @@ class UserStore {
   }
 }
 
+function mapDatabaseUser(credentials, profile = {}) {
+  if (!credentials) return null;
+  return {
+    id: credentials.id,
+    name: profile.name ?? '',
+    email: credentials.email,
+    passwordHash: credentials.passwordhash,
+    role: credentials.role,
+    createdAt: credentials.createdat,
+  };
+}
+
+class DatabaseUserStore {
+  constructor(db) {
+    this.db = db;
+  }
+
+  async initialize() {
+    return Promise.resolve();
+  }
+
+  async find(field, value) {
+    const { data: credentials, error } = await this.db
+      .from(USER_CREDENTIALS_TABLE)
+      .select('*')
+      .eq(field, value)
+      .maybeSingle();
+
+    if (error) throw new Error(`Database error: ${error.message}`);
+    if (!credentials) return null;
+
+    const { data: profile, error: profileError } = await this.db
+      .from(USER_PROFILE_TABLE)
+      .select('*')
+      .eq('userid', credentials.id)
+      .maybeSingle();
+
+    if (profileError) throw new Error(`Database error: ${profileError.message}`);
+    return mapDatabaseUser(credentials, profile);
+  }
+
+  async create(user) {
+    const credentials = {
+      id: user.id,
+      email: user.email,
+      passwordhash: user.passwordHash,
+      role: user.role,
+      createdat: user.createdAt,
+    };
+    const profile = {
+      id: user.id,
+      userid: user.id,
+      name: user.name,
+      contactinfo: null,
+      createdat: user.createdAt,
+    };
+
+    const { error } = await this.db.from(USER_CREDENTIALS_TABLE).insert(credentials);
+    if (error) {
+      if (error.code === '23505') {
+        const duplicate = new Error('An account with this email already exists.');
+        duplicate.code = 'EMAIL_EXISTS';
+        throw duplicate;
+      }
+      throw new Error(`Database error: ${error.message}`);
+    }
+
+    const { error: profileError } = await this.db.from(USER_PROFILE_TABLE).insert(profile);
+    if (profileError) {
+      await this.db.from(USER_CREDENTIALS_TABLE).delete().eq('id', user.id);
+      throw new Error(`Database error: ${profileError.message}`);
+    }
+
+    return user;
+  }
+}
+
+function createUserStore(config) {
+  if (config.useDatabase && config.db) return new DatabaseUserStore(config.db);
+  return new UserStore(config.dataFile);
+}
+
 export async function createAuthModule(config) {
-  const store = new UserStore(config.dataFile);
+  const store = createUserStore(config);
   await store.initialize();
 
   async function createUser({ name, email, password }, role = 'user') {

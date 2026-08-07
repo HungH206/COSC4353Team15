@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Router } from 'express';
+import { listServices } from '../repositories/supabaseQueries.js';
 
 function mapToCamelCase(row) {
   if (!row) return null;
@@ -7,14 +10,78 @@ function mapToCamelCase(row) {
     id: row.id,
     name: row.name,
     description: row.description,
-    expectedDuration: row.expectedduration, 
+    expectedDuration: row.expectedduration,
     priority: row.priority,
-    createdAt: row.createdat,             
-    isOpen: true 
+    createdAt: row.createdat,
+    isOpen: true,
   };
 }
 
-class ServiceStore {
+class FileServiceStore {
+  constructor(file) {
+    this.file = file;
+    this.writeQueue = Promise.resolve();
+  }
+
+  async initialize() {
+    await fs.mkdir(path.dirname(this.file), { recursive: true });
+    try {
+      await fs.access(this.file);
+    } catch {
+      await this.write([]);
+    }
+  }
+
+  async all() {
+    return JSON.parse(await fs.readFile(this.file, 'utf8'));
+  }
+
+  async find(id) {
+    return (await this.all()).find((service) => service.id === id) ?? null;
+  }
+
+  async create(service) {
+    const operation = this.writeQueue.then(async () => {
+      const services = await this.all();
+      services.push(service);
+      await this.write(services);
+      return service;
+    });
+    this.writeQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  async update(id, updates) {
+    const operation = this.writeQueue.then(async () => {
+      const services = await this.all();
+      const index = services.findIndex((service) => service.id === id);
+      if (index === -1) return null;
+      services[index] = { ...services[index], ...updates };
+      await this.write(services);
+      return services[index];
+    });
+    this.writeQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  async delete(id) {
+    const operation = this.writeQueue.then(async () => {
+      const services = (await this.all()).filter((service) => service.id !== id);
+      await this.write(services);
+    });
+    this.writeQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  async write(services) {
+    const temporaryFile = `${this.file}.tmp`;
+    await fs.writeFile(temporaryFile, `${JSON.stringify(services, null, 2)}\n`, 'utf8');
+    await fs.rename(temporaryFile, this.file);
+  }
+}
+
+// Database service store implementation
+class DatabaseServiceStore {
   constructor(db) {
     this.db = db;
   }
@@ -24,14 +91,13 @@ class ServiceStore {
   }
 
   async all() {
-    const { data, error } = await this.db.from('services').select('*');
-    if (error) throw new Error(`Database error: ${error.message}`);
-    return data.map(mapToCamelCase);
+    const services = await listServices(this.db);
+    return services.map(mapToCamelCase);
   }
 
   async find(id) {
     const { data, error } = await this.db
-      .from('services')
+      .from('service')
       .select('*')
       .eq('id', id)
       .maybeSingle(); 
@@ -47,11 +113,11 @@ class ServiceStore {
       description: service.description,
       expectedduration: service.expectedDuration,
       priority: service.priority,
-      createdat: service.createdAt
+      createdat: service.createdAt,
     };
 
     const { data, error } = await this.db
-      .from('services')
+      .from('service')
       .insert(insertData)
       .select()
       .single();
@@ -68,7 +134,7 @@ class ServiceStore {
     if (updates.priority !== undefined) updateData.priority = updates.priority;
 
     const { data, error } = await this.db
-      .from('services')
+      .from('service')
       .update(updateData)
       .eq('id', id)
       .select()
@@ -80,12 +146,17 @@ class ServiceStore {
 
   async delete(id) {
     const { error } = await this.db
-      .from('services')
+      .from('service')
       .delete()
       .eq('id', id);
       
     if (error) throw new Error(`Database error: ${error.message}`);
   }
+}
+
+function createStore(config) {
+  if (config.useDatabase && config.db) return new DatabaseServiceStore(config.db);
+  return new FileServiceStore(config.servicesFile);
 }
 
 function validateService(body = {}) {
@@ -115,7 +186,7 @@ function validateService(body = {}) {
 }
 
 export async function createServiceModule(config, auth) {
-  const store = new ServiceStore(config.db);
+  const store = createStore(config);
   await store.initialize();
 
   const router = Router();

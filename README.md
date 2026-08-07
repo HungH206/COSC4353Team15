@@ -132,6 +132,9 @@ Edit `backend/.env`:
 PORT=3000
 JWT_SECRET=replace-this-with-a-random-secret-at-least-32-characters
 TOKEN_TTL_SECONDS=3600
+USE_DATABASE=false
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
 DATA_FILE=./data/users.json
 
 ADMIN_NAME=QueueSmart Administrator
@@ -152,10 +155,28 @@ HISTORY_FILE=./data/history.json
 NOTIFICATIONS_FILE=./data/notifications.json
 ```
 
+For the Assignment 4 RDBMS implementation, run
+`backend/sql/001_core_tables.sql` in the Supabase SQL editor, or set
+`DATABASE_URL` and run `npm run db:init` from `backend/`. Then set:
+
+```env
+USE_DATABASE=true
+SUPABASE_URL=<your-project-url>
+SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+```
+
+Database mode stores data in these Supabase/Postgres tables:
+`usercredentials`, `userprofile`, `service`, `queue`, `queueentry`, and
+`history`. Notifications are stored in `history` rows with `outcome = null`.
+Passwords are salted `scrypt` hashes, never plain text.
+
+Use the Supabase `service_role` key only in `backend/.env`. Do not put it in the
+frontend `.env` file.
+
 Do not commit `.env`. The administrator and demo user are created on startup
 when their email addresses do not already exist. Changing a seeded password in
 `.env` does not automatically replace an existing password hash in
-`data/users.json`.
+the configured storage.
 
 ## Running locally
 

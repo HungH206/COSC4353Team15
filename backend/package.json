@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "db:init": "node src/initDatabase.js",
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test --test-isolation=none"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",

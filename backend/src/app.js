@@ -1,7 +1,7 @@
 import cors from 'cors';
 import express from 'express';
 
-import { getDbClient } from './db.js';
+import { getSupabaseClient } from './supabase.js';
 
 import { createAuthModule } from './modules/auth.js';
 import { createServiceModule } from './modules/services.js';
@@ -17,7 +17,9 @@ export async function createApp(config) {
   app.use(cors());
   app.use(express.json({ limit: '20kb' }));
 
-  config.db = config.db || await getDbClient(config);
+  if (config.useDatabase && !config.db) {
+    config.db = await getSupabaseClient(config);
+  }
 
   const auth = await createAuthModule(config);
   const services = await createServiceModule(config, auth);
