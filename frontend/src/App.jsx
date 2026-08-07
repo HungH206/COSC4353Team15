@@ -167,25 +167,39 @@ export default function App() {
   };
 
   const handleJoinQueue = async (service) => {
-    const result = await joinQueue(service.id);
-    const [estimate, notifications] = await Promise.all([
-      getWaitTimeEstimate(service.id),
-      listNotifications(),
-    ]);
-    setQueues((previous) => ({
-      ...previous,
-      [service.id]: [...(previous[service.id] || []).filter(Boolean), result.entry],
-    }));
-    setActiveQueue({
-      serviceId: service.id,
-      position: result.position,
-      serviceName: service.name,
-      estWait: result.estWait,
-      entryId: result.entry.id,
-    });
-    setWaitEstimates((previous) => ({ ...previous, [service.id]: estimate }));
-    setNotifs(notifications);
-    setPage('user-status');
+    try {
+      if (typeof service?.id !== 'string' || !service.id.trim()) {
+        throw new Error('Selected service is missing a valid id.');
+      }
+
+      const result = await joinQueue(service.id);
+      const [estimate, notifications] = await Promise.all([
+        getWaitTimeEstimate(service.id),
+        listNotifications(),
+      ]);
+      setQueues((previous) => ({
+        ...previous,
+        [service.id]: [...(previous[service.id] || []).filter(Boolean), result.entry],
+      }));
+      setActiveQueue({
+        serviceId: service.id,
+        position: result.position,
+        serviceName: service.name,
+        estWait: result.estWait,
+        entryId: result.entry.id,
+      });
+      setWaitEstimates((previous) => ({ ...previous, [service.id]: estimate }));
+      setNotifs(notifications);
+      setPage('user-status');
+    } catch (error) {
+      console.error('Join queue failed:', {
+        message: error.message,
+        status: error.status,
+        path: error.path,
+        serviceId: service?.id,
+      });
+      throw error;
+    }
   };
 
   const handleLeaveQueue = async () => {

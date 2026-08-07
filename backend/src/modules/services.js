@@ -13,7 +13,7 @@ function mapToCamelCase(row) {
     expectedDuration: row.expectedduration,
     priority: row.priority,
     createdAt: row.createdat,
-    isOpen: true,
+    isOpen: row.isopen ?? true,
   };
 }
 
@@ -113,6 +113,7 @@ class DatabaseServiceStore {
       description: service.description,
       expectedduration: service.expectedDuration,
       priority: service.priority,
+      isopen: service.isOpen,
       createdat: service.createdAt,
     };
 
@@ -132,6 +133,7 @@ class DatabaseServiceStore {
     if (updates.description !== undefined) updateData.description = updates.description;
     if (updates.expectedDuration !== undefined) updateData.expectedduration = updates.expectedDuration;
     if (updates.priority !== undefined) updateData.priority = updates.priority;
+    if (updates.isOpen !== undefined) updateData.isopen = updates.isOpen;
 
     const { data, error } = await this.db
       .from('service')
@@ -159,11 +161,19 @@ function createStore(config) {
   return new FileServiceStore(config.servicesFile);
 }
 
+function parseInteger(value) {
+  if (Number.isInteger(value)) return value;
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    return Number.parseInt(value.trim(), 10);
+  }
+  return Number.NaN;
+}
+
 function validateService(body = {}) {
   const values = {
     name: typeof body.name === 'string' ? body.name.trim() : '',
     description: typeof body.description === 'string' ? body.description.trim() : '',
-    expectedDuration: Number.parseInt(body.expectedDuration, 10),
+    expectedDuration: parseInteger(body.expectedDuration),
     priority: typeof body.priority === 'string' ? body.priority.trim().toLowerCase() : 'medium',
     isOpen: typeof body.isOpen === 'boolean' ? body.isOpen : true,
   };
@@ -175,8 +185,8 @@ function validateService(body = {}) {
   if (values.description.length < 2 || values.description.length > 500) {
     fields.description = 'Description must be between 2 and 500 characters.';
   }
-  if (Number.isNaN(values.expectedDuration) || values.expectedDuration < 1) {
-    fields.expectedDuration = 'Expected duration must be a positive integer.';
+  if (Number.isNaN(values.expectedDuration) || values.expectedDuration < 1 || values.expectedDuration > 480) {
+    fields.expectedDuration = 'Expected duration must be an integer between 1 and 480 minutes.';
   }
   if (!['low', 'medium', 'high'].includes(values.priority)) {
     fields.priority = 'Priority must be low, medium, or high.';

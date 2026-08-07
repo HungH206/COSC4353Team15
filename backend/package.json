@@ -7,7 +7,7 @@
     "db:init": "node src/initDatabase.js",
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --test --test-isolation=none"
+    "test": "node --test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

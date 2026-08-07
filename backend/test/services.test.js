@@ -166,6 +166,19 @@ test('validates service input correctly', async () => {
   assert.deepEqual(Object.keys(res.body.fields).sort(), ['description', 'expectedDuration', 'name', 'priority']);
 });
 
+test('rejects non-integer service durations', async () => {
+  const payload = JSON.stringify({
+    name: 'Financial Aid',
+    description: 'Scholarship and tuition support',
+    expectedDuration: '15abc',
+    priority: 'medium'
+  });
+
+  const res = await request('/api/services', { method: 'POST', body: payload }, adminToken);
+  assert.equal(res.status, 400);
+  assert.equal(res.body.fields.expectedDuration, 'Expected duration must be an integer between 1 and 480 minutes.');
+});
+
 test('allows anyone authenticated to list services', async () => {
   const res = await request('/api/services', { method: 'GET' }, userToken);
   assert.equal(res.status, 200);

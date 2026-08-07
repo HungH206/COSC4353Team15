@@ -7,7 +7,7 @@ function mapService(row) {
     description: row.description,
     expectedDuration: row.expectedduration,
     priority: row.priority,
-    isOpen: true,
+    isOpen: row.isopen ?? true,
     createdAt: row.createdat,
   };
 }

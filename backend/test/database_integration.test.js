@@ -194,6 +194,39 @@ test('database mode persists services through the Service table', async () => {
   serviceId = response.body.service.id;
   assert.equal(tables.service.length, 1);
   assert.equal(tables.service[0].expectedduration, 15);
+  assert.equal(tables.service[0].isopen, true);
+
+  const closed = await request(`/api/services/${serviceId}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      name: 'Academic Advising',
+      description: 'Course planning and registration support',
+      expectedDuration: 15,
+      priority: 'high',
+      isOpen: false,
+    }),
+  }, adminToken);
+
+  assert.equal(closed.status, 200);
+  assert.equal(tables.service[0].isopen, false);
+
+  const listedClosed = await request('/api/services', {}, userToken);
+  assert.equal(listedClosed.status, 200);
+  assert.equal(listedClosed.body.services.find((service) => service.id === serviceId).isOpen, false);
+
+  const reopened = await request(`/api/services/${serviceId}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      name: 'Academic Advising',
+      description: 'Course planning and registration support',
+      expectedDuration: 15,
+      priority: 'high',
+      isOpen: true,
+    }),
+  }, adminToken);
+
+  assert.equal(reopened.status, 200);
+  assert.equal(tables.service[0].isopen, true);
 });
 
 test('database mode persists queues, entries, notifications, and history', async () => {

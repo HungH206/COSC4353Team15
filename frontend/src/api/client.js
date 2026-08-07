@@ -16,6 +16,8 @@ export async function apiRequest(path, options = {}) {
     if (response.status === 401) clearToken();
     const error = new Error(data?.error || 'Unable to complete the request.');
     error.fields = data?.fields || {};
+    error.status = response.status;
+    error.path = path;
     throw error;
   }
   return data;

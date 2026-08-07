@@ -237,6 +237,22 @@ test('user cannot join the exact same queue twice', async () => {
   assert.equal(res.body.error, 'You are already in this queue.');
 });
 
+test('validates queue service id input', async () => {
+  const join = await request('/api/queue/join', {
+    method: 'POST',
+    body: JSON.stringify({ serviceId: 123 }),
+  }, userToken);
+  assert.equal(join.status, 400);
+  assert.equal(join.body.error, 'serviceId is required.');
+
+  const leave = await request('/api/queue/leave', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }, userToken);
+  assert.equal(leave.status, 400);
+  assert.equal(leave.body.error, 'serviceId is required.');
+});
+
 test('user can leave a queue', async () => {
   const payload = JSON.stringify({ serviceId });
   const res = await request('/api/queue/leave', { method: 'POST', body: payload }, userToken);

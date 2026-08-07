@@ -10,7 +10,7 @@ export async function listServices(db) {
 
 export async function listAvailableServices(db) {
   const services = await listServices(db);
-  return services;
+  return services.filter((service) => service.isopen ?? true);
 }
 
 export async function listOpenQueues(db) {

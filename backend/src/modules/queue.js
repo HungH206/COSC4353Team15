@@ -254,6 +254,19 @@ function createQueueStore(config) {
   if (config.useDatabase && config.db) return new DatabaseQueueStore(config.db);
   return new FileQueueStore(config.queuesFile);
 }
+
+function validateServiceId(serviceId) {
+  return typeof serviceId === 'string' && serviceId.trim().length > 0 && serviceId.trim().length <= 64;
+}
+
+async function runSideEffect(operation, label) {
+  try {
+    await operation();
+  } catch (error) {
+    console.error(`${label} failed:`, error.message);
+  }
+}
+
 export async function createQueueModule(config, auth, serviceStore, historyLogger, notifier) {
   const queues = createQueueStore(config);
   await queues.initialize();
@@ -299,8 +312,8 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
 
   // join a queue
   router.post('/join', auth.authenticate, async (request, response) => {
-    const { serviceId } = request.body;
-    if (!serviceId) return response.status(400).json({ error: 'serviceId is required.' });
+    const serviceId = typeof request.body.serviceId === 'string' ? request.body.serviceId.trim() : '';
+    if (!validateServiceId(serviceId)) return response.status(400).json({ error: 'serviceId is required.' });
 
     const service = await serviceStore.find(serviceId);
     if (!service || !service.isOpen) {
@@ -311,7 +324,10 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
       const entry = await queues.joinQueue(serviceId, request.user);
       const estWait = calculateWaitTime(entry.position, service.expectedDuration);
 
-      await notifier(request.user.id, `You successfully joined the queue for ${service.name}.`);
+      await runSideEffect(
+        () => notifier(request.user.id, `You successfully joined the queue for ${service.name}.`),
+        'Queue join notification',
+      );
       response.status(200).json({ position: entry.position, estWait, entry });
     } catch (error) {
       response.status(400).json({ error: error.message });
@@ -320,14 +336,19 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
 
   // leave a queue
   router.post('/leave', auth.authenticate, async (request, response) => {
-    const { serviceId } = request.body;
+    const serviceId = typeof request.body.serviceId === 'string' ? request.body.serviceId.trim() : '';
+    if (!validateServiceId(serviceId)) return response.status(400).json({ error: 'serviceId is required.' });
+
     try {
       const oldIndex = await queues.leaveQueue(serviceId, request.user.id);
       
       const service = await serviceStore.find(serviceId);
       if (service) {
         const waitMinutes = calculateWaitTime(oldIndex + 1, service.expectedDuration);
-        await historyLogger(request.user.id, service.name, waitMinutes, 'left');
+        await runSideEffect(
+          () => historyLogger(request.user.id, service.name, waitMinutes, 'left'),
+          'Queue leave history',
+        );
       }
       response.status(200).json({ message: 'Left queue successfully.' });
     } catch (error) {
@@ -344,11 +365,17 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
       
       const service = await serviceStore.find(serviceId);
       if (service) {
-        await historyLogger(servedUser.userId, service.name, service.expectedDuration, 'served');
+        await runSideEffect(
+          () => historyLogger(servedUser.userId, service.name, service.expectedDuration, 'served'),
+          'Queue serve history',
+        );
       }
 
       if (nextUser) {
-        await notifier(nextUser.userId, `You are next for ${service?.name || 'the service'}! Please head to the counter.`);
+        await runSideEffect(
+          () => notifier(nextUser.userId, `You are next for ${service?.name || 'the service'}! Please head to the counter.`),
+          'Queue next-user notification',
+        );
       }
 
       response.status(200).json({ served: servedUser });
