@@ -18,8 +18,9 @@ export function loadConfig(overrides = {}) {
     tokenTtlSeconds: positiveInteger(process.env.TOKEN_TTL_SECONDS, 3600),
 
     supabaseUrl: process.env.SUPABASE_URL,
-    supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_KEY,
-    useDatabase: process.env.USE_DATABASE === 'true',
+    supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_KEY,
+    useDatabase: process.env.USE_DATABASE === 'true'
+      || (process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_KEY)),
 
     dataFile: path.resolve(backendRoot, process.env.DATA_FILE ?? 'data/users.json'),
     servicesFile: path.resolve(backendRoot, process.env.SERVICES_FILE ?? 'data/services.json'),
