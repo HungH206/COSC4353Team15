@@ -1,0 +1,11 @@
+{
+  "name": "queuesmart",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build --prefix frontend"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}
