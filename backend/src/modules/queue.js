@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Router } from 'express';
-import { calculateWaitTime } from './time_estimation.js';
+import { calculateWaitTime, calculateSmartWaitTime } from './time_estimation.js';
 
 const ACTIVE_ENTRY_STATUSES = ['waiting'];
 
@@ -322,7 +322,14 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
 
     try {
       const entry = await queues.joinQueue(serviceId, request.user);
-      const estWait = calculateWaitTime(entry.position, service.expectedDuration);
+
+      //SMART FEARTURE CACULATION LOGIC
+      let estWait;
+      if (config.useDatabase && config.db) {
+        estWait = await calculateSmartWaitTime(config.db, service.name, entry.position, service.expectedDuration);
+      } else {
+        estWait = calculateWaitTime(entry.position, service.expectedDuration);
+      }
 
       await runSideEffect(
         () => notifier(request.user.id, `You successfully joined the queue for ${service.name}.`),
@@ -365,9 +372,26 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
       
       const service = await serviceStore.find(serviceId);
       if (service) {
+
+        //SMART FEATURE ACTUAL TIME CALCULATION
+        let actualWaitMinutes = service.expectedDuration;
+
+        if (servedUser.jointime) {
+          const joinDate = new Date(servedUser.jointime);
+          if (!isNaN(joinDate.getTime())) {
+            const serveTime = Date.now();
+            // Calculate the actual elapsed time in minutes
+            actualWaitMinutes = Math.max(1, Math.round((serveTime - joinDate.getTime()) / 60000));
+          }
+        }
+
         await runSideEffect(
           () => historyLogger(servedUser.userId, service.name, service.expectedDuration, 'served'),
           'Queue serve history',
+        );
+        await runSideEffect(
+          () => notifier(servedUser.userId, `It's your turn for ${service.name}! Please head to the counter.`),
+          'Queue served-user notification',
         );
       }
 

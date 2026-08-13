@@ -33,7 +33,7 @@ export async function createApp(config) {
     history.log,          // real history logger now
     notifications.notify  // real notifier now, was dummyNotifier
   );
-  const timeEstimation = createTimeEstimationModule(auth, services.store, queue.store);
+  const timeEstimation = createTimeEstimationModule(auth, services.store, queue.store, config.db);
 
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok' });
