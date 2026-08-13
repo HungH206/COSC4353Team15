@@ -14,7 +14,24 @@ function formatDateTime(value) {
   });
 }
 
-export default function AdminReports({ services = [], queues = {}, userStatsReport = [] }) {
+function formatMinutes(value) {
+  if (value == null) return '—';
+  return `${Math.round(value)} min`;
+}
+
+function formatPercent(value) {
+  if (value == null) return '—';
+  return `${value}%`;
+}
+
+function formatSignedMinutes(value) {
+  if (value == null) return '—';
+  const rounded = Math.round(value);
+  if (rounded === 0) return 'On target';
+  return `${rounded > 0 ? '+' : ''}${rounded} min`;
+}
+
+export default function AdminReports({ services = [], queues = {}, userStatsReport = [], queueStatsReport = [] }) {
   const [activeTab, setActiveTab] = useState('user-history');
 
   //listUserStatsReport() { id, name, email, serviceName, joinedAt, outcome: 'served'|'left', outcomeAt }
@@ -22,11 +39,18 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
 
   // TODO: map `services` into report rows
   // shape: { id, name, description, priority, status, duration }
-  const serviceDetails = [];
+  const serviceActivity = [];
 
-  // TODO: combine `services` + `queues` + `history` into per-service stats
-  // shape: { id, name, served, avgWait, accuracy, left, waiting }
-  const queueStats = [];
+  // store.queueStats() { id, name, joined, served, leavePercent, avgWaitMinutes, errorMinutes }
+  const queueStats = queueStatsReport.map((q) => ({
+    id: q.id,
+    name: q.name,
+    joined: q.joined,
+    served: q.served,
+    left: formatPercent(q.leavePercent),
+    avgWait: formatMinutes(q.avgWaitMinutes),
+    error: formatSignedMinutes(q.errorMinutes),
+  }));
 
   const EXPORT_CONFIG = {
     'user-history': {
@@ -40,15 +64,15 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
         `${u.outcome === 'served' ? 'Served' : 'Left'} (${formatDateTime(u.outcomeAt)})`,
       ]),
     },
-    'service-details': {
+    'service-activity': {
       headers: ['Service', 'Description', 'Priority', 'Status', 'Duration'],
-      filename: 'service_details_report.csv',
-      rows: serviceDetails.map((s) => [s.name, s.description, s.priority, s.status, s.duration]),
+      filename: 'service_activity_report.csv',
+      rows: serviceActivity.map((s) => [s.name, s.description, s.priority, s.status, s.duration]),
     },
     'queue-stats': {
-      headers: ['Service', 'Served', 'Avg Wait', 'Est Accuracy', 'Left', 'Waiting'],
+      headers: ['Service', 'Joined', 'Serviced', '% Left', 'Average Wait', 'Est Error'],
       filename: 'queue_stats_report.csv',
-      rows: queueStats.map((r) => [r.name, r.served, r.avgWait, r.accuracy, r.left, r.waiting]),
+      rows: queueStats.map((r) => [r.name, r.joined, r.served, r.left, r.avgWait, r.error]),
     },
   };
 
@@ -87,7 +111,7 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
         <div className="block-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="tab-controls">
             <button type="button" className={`report-tab ${activeTab === 'user-history' ? 'active' : ''}`} onClick={() => setActiveTab('user-history')}>User History</button>
-            <button type="button" className={`report-tab ${activeTab === 'service-details' ? 'active' : ''}`} onClick={() => setActiveTab('service-details')}>Service Details</button>
+            <button type="button" className={`report-tab ${activeTab === 'service-activity' ? 'active' : ''}`} onClick={() => setActiveTab('service-activity')}>Service Activity</button>
             <button type="button" className={`report-tab ${activeTab === 'queue-stats' ? 'active' : ''}`} onClick={() => setActiveTab('queue-stats')}>Queue Statistics</button>
           </div>
         </div>
@@ -101,7 +125,7 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                     <th>Email</th>
                     <th>Service Requested</th>
                     <th>Join Time</th>
-                    <th>Status</th>
+                    <th>Outcome</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -131,7 +155,7 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
               </table>
             )}
 
-            {activeTab === 'service-details' && (
+            {activeTab === 'service-activity' && (
               <table className="service-list-table" style={{ width: '100%' }}>
                 <thead>
                   <tr className="service-list-header">
@@ -143,12 +167,12 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                   </tr>
                 </thead>
                 <tbody>
-                  {serviceDetails.length === 0 && (
+                  {serviceActivity.length === 0 && (
                     <tr>
                       <td colSpan={5}>No services configured.</td>
                     </tr>
                   )}
-                  {serviceDetails.map((s) => (
+                  {serviceActivity.map((s) => (
                     <tr key={s.id} className="service-list-row">
                       <td>
                         <strong>{s.name}</strong>
@@ -168,11 +192,11 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                 <thead>
                   <tr className="service-list-header">
                     <th style={{ textAlign: 'left' }}>Service</th>
-                    <th>Served</th>
-                    <th>Avg Wait</th>
-                    <th>Est Accuracy</th>
-                    <th>Left</th>
-                    <th>Waiting</th>
+                    <th>Joined</th>
+                    <th>Serviced</th>
+                    <th>% Left</th>
+                    <th>Average Wait</th>
+                    <th>Estimation Error</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -186,11 +210,11 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                       <td>
                         <strong>{r.name}</strong>
                       </td>
+                      <td style={{ textAlign: 'center' }}>{r.joined}</td>
                       <td style={{ textAlign: 'center' }}>{r.served}</td>
-                      <td style={{ textAlign: 'center' }}>{r.avgWait}</td>
-                      <td style={{ textAlign: 'center' }}>{r.accuracy}</td>
                       <td style={{ textAlign: 'center' }}>{r.left}</td>
-                      <td style={{ textAlign: 'center' }}>{r.waiting}</td>
+                      <td style={{ textAlign: 'center' }}>{r.avgWait}</td>
+                      <td style={{ textAlign: 'center' }}>{r.error}</td>
                     </tr>
                   ))}
                 </tbody>
