@@ -19,6 +19,7 @@ import { getAllQueues, getMyQueues, getQueueCounts, joinQueue, leaveQueue, serve
 import { getWaitTimeEstimate, listWaitTimeEstimates } from './api/timeEstimation.js';
 import { listNotifications, markNotificationRead } from './api/notifications.js';
 import { listHistory } from './api/history.js';
+import { listUserStatsReport } from './api/reports.js';
 
 const USER_NAV = [
   { id: 'user-dashboard', label: 'Dashboard' },
@@ -43,6 +44,7 @@ export default function App() {
   const [activeQueue, setActiveQueue] = useState(null);
   const [waitEstimates, setWaitEstimates] = useState({});
   const [history, setHistory] = useState([]);
+  const [userStatsReport, setUserStatsReport] = useState([]);
   const [showNotifs, setShowNotifs] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
 
@@ -134,6 +136,13 @@ export default function App() {
     if (!user || user.role === 'admin' || page !== 'user-history') return;
     listHistory()
       .then(setHistory)
+      .catch((error) => pushNotification(error.message, 'warning'));
+  }, [page, user]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin' || page !== 'admin-report') return;
+    listUserStatsReport()
+      .then(setUserStatsReport)
       .catch((error) => pushNotification(error.message, 'warning'));
   }, [page, user]);
 
@@ -269,7 +278,7 @@ export default function App() {
       case 'admin-queue':
         return <AdminQueue services={services} queues={queues} onServeNext={handleServeNext} />;
       case 'admin-report':
-        return <AdminReports services={services} queues={queues} />;
+        return <AdminReports services={services} queues={queues} userStatsReport={userStatsReport} />;
       default:
         return null;
     }
