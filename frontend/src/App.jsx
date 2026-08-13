@@ -11,6 +11,7 @@ import UserHistory from './pages/UserHistory.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import AdminServices from './pages/AdminServices.jsx';
 import AdminQueue from './pages/AdminQueue.jsx';
+import AdminReports from './pages/AdminReports.jsx';
 import NotificationPanel from './components/NotificationPanel.jsx';
 import { clearToken, getCurrentUser, loadToken, saveToken } from './api/auth.js';
 import { createService, deleteService, listServices, updateService } from './api/services.js';
@@ -30,6 +31,7 @@ const ADMIN_NAV = [
   { id: 'admin-dashboard', label: 'Dashboard' },
   { id: 'admin-services', label: 'Services' },
   { id: 'admin-queue', label: 'Queue Manager' },
+  { id: 'admin-report', label: 'Reports'}
 ];
 
 export default function App() {
@@ -266,6 +268,8 @@ export default function App() {
         return <AdminServices services={services} onSaveService={handleSaveService} onDeleteService={handleDeleteService} />;
       case 'admin-queue':
         return <AdminQueue services={services} queues={queues} onServeNext={handleServeNext} />;
+      case 'admin-report':
+        return <AdminReports services={services} queues={queues} />;
       default:
         return null;
     }

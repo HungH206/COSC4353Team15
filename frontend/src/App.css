@@ -564,6 +564,56 @@ select:focus {
   padding: 1rem;
 }
 
+/* Make service-list-table behave like a classic table for report views
+   - fixed layout so column widths don't expand with content
+   - smaller font and reduced padding to fit more data
+   - allow cells to wrap and rows to grow (like Excel auto-height)
+   - override grid row/header definitions when table is used */
+table.service-list-table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.9rem;
+}
+
+table.service-list-table thead tr.service-list-header,
+table.service-list-table tbody tr.service-list-row {
+  display: table-row !important;
+}
+
+table.service-list-table th,
+table.service-list-table td {
+  display: table-cell;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  white-space: normal; /* allow wrapping */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+table.service-list-table thead th {
+  background: var(--surface);
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+}
+
+/* Prevent the earlier grid-template-columns from applying inside table context */
+table.service-list-table .service-list-header,
+table.service-list-table .service-list-row {
+  grid-template-columns: none;
+}
+
+/* Make first column slightly wider by default (can be overridden) */
+table.service-list-table th:first-child,
+table.service-list-table td:first-child {
+  width: 40%;
+}
+
+
 .service-table-row,
 .queue-item,
 .history-row,
@@ -704,6 +754,12 @@ select:focus {
   margin-top: 1rem;
 }
 
+.tab-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .tab-button {
   border: 1px solid var(--border);
   border-radius: 9999px;
@@ -715,6 +771,23 @@ select:focus {
 }
 
 .tab-button.tab-active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.report-tab {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  color: var(--card-foreground);
+  padding: 0.85rem 1rem;
+  gap: 0.85rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.report-tab.active {
   background: var(--primary);
   color: var(--primary-foreground);
   border-color: var(--primary);
