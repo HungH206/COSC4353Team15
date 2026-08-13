@@ -1,11 +1,23 @@
 // Admin report module, Darelle Herrera 08/13/2026
 import { useState } from 'react';
 import Button from '../components/Button.jsx';
+import Badge from '../components/Badge.jsx';
+
+function formatDateTime(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
 
 export default function AdminReports({ services = [], queues = {}, userStatsReport = [] }) {
   const [activeTab, setActiveTab] = useState('user-history');
 
-  //listUserStatsReport() { id, name, queuesJoined, served, left, avgWaitMinutes }
+  //listUserStatsReport() { id, name, email, serviceName, joinedAt, outcome: 'served'|'left', outcomeAt }
   const userStats = userStatsReport;
 
   // TODO: map `services` into report rows
@@ -18,15 +30,14 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
 
   const EXPORT_CONFIG = {
     'user-history': {
-      headers: ['Name', 'Email', 'Queues Joined', '# Times Serviced', '# Times Left', 'Average Wait Time'],
+      headers: ['Name', 'Email', 'Service Requested', 'Join Time', 'Status'],
       filename: 'user_history_report.csv',
       rows: userStats.map((u) => [
         u.name,
         u.email ?? '',
-        u.queuesJoined,
-        u.served,
-        u.left,
-        u.avgWaitMinutes != null ? `${u.avgWaitMinutes}m` : '',
+        u.serviceName,
+        formatDateTime(u.joinedAt),
+        `${u.outcome === 'served' ? 'Served' : 'Left'} (${formatDateTime(u.outcomeAt)})`,
       ]),
     },
     'service-details': {
@@ -88,16 +99,15 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                   <tr className="service-list-header">
                     <th style={{ textAlign: 'left' }}>Name</th>
                     <th>Email</th>
-                    <th>Queues Joined</th>
-                    <th># Times Serviced</th>
-                    <th># Times Left</th>
-                    <th>Average Wait Time</th>
+                    <th>Service Requested</th>
+                    <th>Join Time</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {userStats.length === 0 && (
                     <tr>
-                      <td colSpan={6}>No history available.</td>
+                      <td colSpan={5}>No history available.</td>
                     </tr>
                   )}
                   {userStats.map((u) => (
@@ -106,10 +116,15 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                         <strong>{u.name}</strong>
                       </td>
                       <td style={{ textAlign: 'left' }}>{u.email ?? '—'}</td>
-                      <td style={{ textAlign: 'center' }}>{u.queuesJoined}</td>
-                      <td style={{ textAlign: 'center' }}>{u.served}</td>
-                      <td style={{ textAlign: 'center' }}>{u.left}</td>
-                      <td style={{ textAlign: 'center' }}>{u.avgWaitMinutes != null ? `${u.avgWaitMinutes}m` : '—'}</td>
+                      <td style={{ textAlign: 'left' }}>{u.serviceName}</td>
+                      <td style={{ textAlign: 'center' }}>{formatDateTime(u.joinedAt)}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <Badge
+                          text={u.outcome === 'served' ? 'Served' : 'Left'}
+                          className={u.outcome === 'served' ? 'badge-success' : 'badge-muted'}
+                        />
+                        <div className="text-muted">{formatDateTime(u.outcomeAt)}</div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

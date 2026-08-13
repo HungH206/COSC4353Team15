@@ -10,7 +10,7 @@ class DatabaseReportsStore {
   }
 
   async userStats() {
-    //users only, not admins
+    // Users only, not admins.
     const { data: credentials, error: credentialsError } = await this.db
       .from('usercredentials')
       .select('id, email')
@@ -23,17 +23,8 @@ class DatabaseReportsStore {
       .from('userprofile')
       .select('userid, name');
     if (profileError) throw new Error(`Database error: ${profileError.message}`);
-    const userProfiles = profiles.filter((profile) => userIds.has(profile.userid));
+    const nameById = new Map(profiles.map((profile) => [profile.userid, profile.name]));
 
-    const { data: historyRows, error: historyError } = await this.db
-      .from('history')
-      .select('userid, message, outcome, createdat');
-    if (historyError) throw new Error(`Database error: ${historyError.message}`);
-
-    //`queueentry` (jointime) to its matching served `history` (createdat)
-    // join through service name:
-    //still assumes service names are unique like
-    //mapDatabaseHistory() with history.message, not urgent fix
     const { data: queueRows, error: queueError } = await this.db
       .from('queue')
       .select('id, serviceid');
@@ -46,83 +37,71 @@ class DatabaseReportsStore {
     if (serviceError) throw new Error(`Database error: ${serviceError.message}`);
     const serviceNameById = new Map(serviceRows.map((s) => [s.id, s.name]));
 
-    const { data: servedEntries, error: entryError } = await this.db
+    // Only resolved entries.
+    const { data: entries, error: entryError } = await this.db
       .from('queueentry')
-      .select('userid, queueid, jointime')
-      .eq('status', 'served');
+      .select('id, userid, queueid, jointime, status')
+      .in('status', ['served', 'canceled']);
     if (entryError) throw new Error(`Database error: ${entryError.message}`);
 
-    //only one queue active at a time for user
-    const joinTimesByUserService = new Map();
-    for (const entry of servedEntries) {
-      if (!userIds.has(entry.userid)) continue;
-      const serviceName = serviceNameById.get(serviceIdByQueueId.get(entry.queueid));
-      if (!serviceName) continue;
-      const key = `${entry.userid}::${serviceName}`;
-      if (!joinTimesByUserService.has(key)) joinTimesByUserService.set(key, []);
-      joinTimesByUserService.get(key).push(new Date(entry.jointime).getTime());
-    }
-    for (const times of joinTimesByUserService.values()) times.sort((a, b) => a - b);
+    const { data: historyRows, error: historyError } = await this.db
+      .from('history')
+      .select('userid, message, outcome, createdat')
+      .in('outcome', ['served', 'left']);
+    if (historyError) throw new Error(`Database error: ${historyError.message}`);
 
-    const servedAtTimesByUserService = new Map();
-    for (const row of historyRows) {
-      if (!userIds.has(row.userid) || row.outcome !== 'served') continue;
-      const serviceName = row.message?.replace(/^Served by /, '').replace(/\.$/, '');
-      if (!serviceName) continue;
-      const key = `${row.userid}::${serviceName}`;
-      if (!servedAtTimesByUserService.has(key)) servedAtTimesByUserService.set(key, []);
-      servedAtTimesByUserService.get(key).push(new Date(row.createdat).getTime());
-    }
-    for (const times of servedAtTimesByUserService.values()) times.sort((a, b) => a - b);
-
-    const statsByUser = new Map();
-    const getStats = (userId) => {
-      if (!statsByUser.has(userId)) {
-        statsByUser.set(userId, { queuesJoined: 0, served: 0, left: 0, waitDurationsMs: [] });
+    const groupSortedTimes = (rows, prefix) => {
+      const byKey = new Map();
+      for (const row of rows) {
+        if (!userIds.has(row.userid)) continue;
+        const serviceName = row.message?.startsWith(prefix)
+          ? row.message.slice(prefix.length).replace(/\.$/, '')
+          : null;
+        if (!serviceName) continue;
+        const key = `${row.userid}::${serviceName}`;
+        if (!byKey.has(key)) byKey.set(key, []);
+        byKey.get(key).push(new Date(row.createdat).getTime());
       }
-      return statsByUser.get(userId);
+      for (const times of byKey.values()) times.sort((a, b) => a - b);
+      return byKey;
     };
+    const servedTimesByKey = groupSortedTimes(historyRows.filter((r) => r.outcome === 'served'), 'Served by ');
+    const leftTimesByKey = groupSortedTimes(historyRows.filter((r) => r.outcome === 'left'), 'Left ');
 
-    for (const [key, servedAtTimes] of servedAtTimesByUserService) {
-      const [userId] = key.split('::');
-      const joinTimes = joinTimesByUserService.get(key) || [];
-      const stats = getStats(userId);
-      servedAtTimes.forEach((servedAt, index) => {
-        const joinedAt = joinTimes[index];
-        if (joinedAt == null || servedAt < joinedAt) return;
-        stats.waitDurationsMs.push(servedAt - joinedAt);
+    // A user can only have one active entry per service at a time (joinQueue
+    // rejects a second join), so grouping queueentry rows by status+user+service
+    const entriesByStatusKey = new Map();
+    for (const entry of entries) {
+      if (!userIds.has(entry.userid)) continue;
+      const serviceName = serviceNameById.get(serviceIdByQueueId.get(entry.queueid)) ?? null;
+      const key = `${entry.status}::${entry.userid}::${serviceName ?? 'unknown'}`;
+      if (!entriesByStatusKey.has(key)) entriesByStatusKey.set(key, []);
+      entriesByStatusKey.get(key).push({ ...entry, serviceName });
+    }
+
+    const rows = [];
+    for (const [statusKey, keyEntries] of entriesByStatusKey) {
+      const status = statusKey.startsWith('served::') ? 'served' : 'canceled';
+      const matchKey = statusKey.slice(status.length + 2);
+      const historyTimes = (status === 'served' ? servedTimesByKey : leftTimesByKey).get(matchKey) || [];
+
+      keyEntries.sort((a, b) => new Date(a.jointime) - new Date(b.jointime));
+      keyEntries.forEach((entry, index) => {
+        const outcomeAt = historyTimes[index] != null ? new Date(historyTimes[index]).toISOString() : null;
+        rows.push({
+          id: entry.id,
+          name: nameById.get(entry.userid) ?? 'Unknown',
+          email: emailById.get(entry.userid) ?? null,
+          serviceName: entry.serviceName ?? 'Unknown service',
+          joinedAt: entry.jointime,
+          outcome: status === 'served' ? 'served' : 'left',
+          outcomeAt,
+        });
       });
     }
 
-    for (const row of historyRows) {
-      if (!userIds.has(row.userid)) continue;
-      const stats = getStats(row.userid);
-      if (row.outcome === 'served') {
-        stats.served += 1;
-      } else if (row.outcome === 'left') {
-        stats.left += 1;
-      } else if (row.outcome === null && row.message?.includes('joined the queue')) {
-        stats.queuesJoined += 1;
-      }
-    }
-
-    return userProfiles.map((profile) => {
-      const stats = getStats(profile.userid);
-      const avgWaitMinutes = stats.waitDurationsMs.length
-        ? Math.round(
-            stats.waitDurationsMs.reduce((sum, ms) => sum + ms, 0) / stats.waitDurationsMs.length / 60000,
-          )
-        : null;
-      return {
-        id: profile.userid,
-        name: profile.name,
-        email: emailById.get(profile.userid) ?? null,
-        queuesJoined: stats.queuesJoined,
-        served: stats.served,
-        left: stats.left,
-        avgWaitMinutes,
-      };
-    });
+    rows.sort((a, b) => new Date(b.joinedAt) - new Date(a.joinedAt));
+    return rows;
   }
 }
 
