@@ -9,6 +9,7 @@ import { createQueueModule } from './modules/queue.js';
 import { createNotificationModule } from './modules/notifs.js';
 import { createHistoryModule } from './modules/history.js';
 import { createTimeEstimationModule } from './modules/time_estimation.js';
+import { createReportsModule } from './modules/reports.js';
 
 
 export async function createApp(config) {
@@ -25,6 +26,7 @@ export async function createApp(config) {
   const services = await createServiceModule(config, auth);
   const notifications = await createNotificationModule(config, auth);
   const history = await createHistoryModule(config, auth);
+  const reports = await createReportsModule(config, auth);
 
   const queue = await createQueueModule(
     config,
@@ -45,6 +47,7 @@ export async function createApp(config) {
   app.use('/api/time-estimation', timeEstimation.router);
   app.use('/api/notifications', notifications.router);
   app.use('/api/history', history.router);
+  app.use('/api/reports', reports.router);
 
   app.use((_request, response) => {
     response.status(404).json({ error: 'Route not found.' });
