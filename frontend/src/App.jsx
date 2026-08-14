@@ -7,6 +7,7 @@ import Register from './pages/Register.jsx';
 import UserDashboard from './pages/UserDashboard.jsx';
 import JoinQueue from './pages/JoinQueue.jsx';
 import QueueStatus from './pages/QueueStatus.jsx';
+import AIAssistant from './pages/AIAssistant.jsx';
 import UserHistory from './pages/UserHistory.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import AdminServices from './pages/AdminServices.jsx';
@@ -25,6 +26,7 @@ const USER_NAV = [
   { id: 'user-dashboard', label: 'Dashboard' },
   { id: 'user-join', label: 'Join Queue' },
   { id: 'user-status', label: 'Queue Status' },
+  { id: 'user-assistant', label: 'AI Assistant' },
   { id: 'user-history', label: 'History' },
 ];
 
@@ -277,6 +279,8 @@ export default function App() {
         return <JoinQueue services={services} waitEstimates={waitEstimates} activeQueue={activeQueue} onJoin={handleJoinQueue} onLeave={handleLeaveQueue} />;
       case 'user-status':
         return <QueueStatus activeQueue={activeQueue} services={services} queues={queues} estimate={waitEstimates[activeQueue?.serviceId]} onLeave={handleLeaveQueue} />;
+      case 'user-assistant':
+        return <AIAssistant />;
       case 'user-history':
         return <UserHistory history={history} />;
       case 'admin-dashboard':

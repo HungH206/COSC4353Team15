@@ -28,6 +28,11 @@ export function loadConfig(overrides = {}) {
     historyFile: path.resolve(backendRoot, process.env.HISTORY_FILE ?? 'data/history.json'),
     notificationsFile: path.resolve(backendRoot, process.env.NOTIFICATIONS_FILE ?? 'data/notifications.json'),
 
+    aiApiKey: process.env.AI_API_KEY ?? process.env.OPENAI_API_KEY,
+    aiApiBaseUrl: process.env.AI_API_BASE_URL ?? 'https://api.openai.com/v1',
+    aiChatModel: process.env.AI_CHAT_MODEL,
+    aiTimeoutMs: positiveInteger(process.env.AI_TIMEOUT_MS, 8000),
+
     admin: {
       name: process.env.ADMIN_NAME,
       email: process.env.ADMIN_EMAIL,
