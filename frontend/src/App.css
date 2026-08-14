@@ -812,6 +812,16 @@ table.service-list-table td:first-child {
   display: block;
 }
 
+.history-row strong {
+  display: block;
+}
+
+.history-row small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted-foreground);
+}
+
 .service-list-row .action-buttons {
   justify-self: end;
   display: flex;

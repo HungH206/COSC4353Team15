@@ -45,6 +45,7 @@ export default function App() {
   const [queues, setQueues] = useState({});
   const [notifs, setNotifs] = useState([]);
   const [activeQueue, setActiveQueue] = useState(null);
+  const [userQueueMemberships, setUserQueueMemberships] = useState([]);
   const [waitEstimates, setWaitEstimates] = useState({});
   const [history, setHistory] = useState([]);
   const [userStatsReport, setUserStatsReport] = useState([]);
@@ -87,8 +88,10 @@ export default function App() {
     setActiveQueue(null);
     setServices([]);
     setQueues({});
+    setUserQueueMemberships([]);
     setWaitEstimates({});
     setNotifs([]);
+    setHistory([]);
     setMobileNavOpen(false);
   };
 
@@ -121,6 +124,7 @@ export default function App() {
         const current = memberships[0] ?? null;
         if (current) queueCounts[current.serviceId] = current.queue;
         setQueues(queueCounts);
+        setUserQueueMemberships(memberships);
         setWaitEstimates(estimates);
         setHistory(loadedHistory);
         setActiveQueue(current ? {
@@ -140,8 +144,11 @@ export default function App() {
 
   useEffect(() => {
     if (!user || user.role === 'admin' || page !== 'user-history') return;
-    listHistory()
-      .then(setHistory)
+    Promise.all([getMyQueues(), listHistory()])
+      .then(([memberships, loadedHistory]) => {
+        setUserQueueMemberships(memberships);
+        setHistory(loadedHistory);
+      })
       .catch((error) => pushNotification(error.message, 'warning'));
   }, [page, user]);
 
@@ -212,6 +219,17 @@ export default function App() {
         estWait: result.estWait,
         entryId: result.entry.id,
       });
+      setUserQueueMemberships((previous) => [
+        ...previous.filter((membership) => membership.serviceId !== service.id),
+        {
+          serviceId: service.id,
+          serviceName: service.name,
+          position: result.position,
+          estWait: result.estWait,
+          entry: result.entry,
+          queue: [...(queues[service.id] || []).filter(Boolean), result.entry],
+        },
+      ]);
       setWaitEstimates((previous) => ({ ...previous, [service.id]: estimate }));
       setNotifs(notifications);
       setPage('user-status');
@@ -238,6 +256,7 @@ export default function App() {
       [activeQueue.serviceId]: (prev[activeQueue.serviceId] || []).filter((entry) => entry?.id !== activeQueue.entryId),
     }));
     pushNotification(`You left the ${activeQueue.serviceName} queue.`, 'warning');
+    setUserQueueMemberships((previous) => previous.filter((membership) => membership.serviceId !== activeQueue.serviceId));
     setActiveQueue(null);
     setWaitEstimates(estimates);
     setHistory(updatedHistory);
@@ -285,7 +304,7 @@ export default function App() {
       case 'user-assistant':
         return <AIAssistant />;
       case 'user-history':
-        return <UserHistory history={history} />;
+        return <UserHistory history={history} currentQueues={userQueueMemberships} />;
       case 'admin-dashboard':
         return <AdminDashboard services={services} queues={queues} />;
       case 'admin-services':

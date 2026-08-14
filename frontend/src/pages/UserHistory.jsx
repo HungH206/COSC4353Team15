@@ -7,12 +7,21 @@ import Button from '../components/Button.jsx';
 
 const PAGE_SIZE = 10;
 
-export default function UserHistory({ history }) {
+export default function UserHistory({ history, currentQueues = [] }) {
   const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(history.length / PAGE_SIZE));
+  const activeHistory = currentQueues.map((membership) => ({
+    id: `active-${membership.serviceId}`,
+    serviceName: membership.serviceName,
+    createdAt: membership.entry?.joinedAtIso,
+    waitMinutes: membership.estWait,
+    outcome: 'waiting',
+    position: membership.position,
+  }));
+  const fullHistory = [...activeHistory, ...history];
+  const totalPages = Math.max(1, Math.ceil(fullHistory.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * PAGE_SIZE;
-  const visibleHistory = history.slice(pageStart, pageStart + PAGE_SIZE);
+  const visibleHistory = fullHistory.slice(pageStart, pageStart + PAGE_SIZE);
 
   const formatDate = (value) => {
     if (!value) return 'Unknown';
@@ -30,37 +39,45 @@ export default function UserHistory({ history }) {
       <div className="page-header">
         <div>
           <h2>Queue History</h2>
-          <p className="subtitle">Review your past queue sessions and outcomes.</p>
+          <p className="subtitle">Review your current and past queue participation.</p>
         </div>
       </div>
       <div className="history-table">
         <div className="history-row history-row-head">
           <span>Service</span>
-          <span>Date</span>
+          <span>Joined / Completed</span>
           <span>Wait</span>
           <span>Outcome</span>
         </div>
-        {history.length === 0 ? (
+        {fullHistory.length === 0 ? (
           <div className="empty-state-card">
             <p>No queue history yet.</p>
           </div>
         ) : (
           visibleHistory.map((item) => (
             <div key={item.id} className="history-row">
-              <span>{item.serviceName}</span>
+              <span>
+                <strong>{item.serviceName}</strong>
+                {item.outcome === 'waiting' && item.position ? (
+                  <small>Position #{item.position}</small>
+                ) : null}
+              </span>
               <span>{formatDate(item.createdAt)}</span>
               <span>{item.waitMinutes} min</span>
               <span>
-                <Badge text={item.outcome === 'served' ? 'Served' : 'Left'} className={item.outcome === 'served' ? 'badge-success' : 'badge-muted'} />
+                <Badge
+                  text={item.outcome === 'waiting' ? 'Waiting' : item.outcome === 'served' ? 'Served' : 'Left'}
+                  className={item.outcome === 'waiting' ? 'badge-primary' : item.outcome === 'served' ? 'badge-success' : 'badge-muted'}
+                />
               </span>
             </div>
           ))
         )}
       </div>
-      {history.length > PAGE_SIZE && (
+      {fullHistory.length > PAGE_SIZE && (
         <div className="pagination-row">
           <span>
-            Showing {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, history.length)} of {history.length}
+            Showing {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, fullHistory.length)} of {fullHistory.length}
           </span>
           <div className="pagination-actions">
             <Button variant="secondary" size="sm" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={safePage === 1}>
