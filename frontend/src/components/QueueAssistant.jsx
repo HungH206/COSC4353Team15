@@ -8,14 +8,24 @@ const STARTER_QUESTIONS = [
   'Should I stay in this queue?',
 ];
 
-export default function QueueAssistant({ className = '', fullHeight = false }) {
+const ADMIN_STARTER_QUESTIONS = [
+  'Which queue needs attention?',
+  'Where should staff focus next?',
+  'Which service has the highest wait load?',
+];
+
+export default function QueueAssistant({ className = '', fullHeight = false, role = 'user' }) {
+  const isAdmin = role === 'admin';
+  const starterQuestions = isAdmin ? ADMIN_STARTER_QUESTIONS : STARTER_QUESTIONS;
   const [chatInput, setChatInput] = useState('');
   const [chatError, setChatError] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      text: 'Ask me about your queue position, wait time, or whether another service may be faster.',
+      text: isAdmin
+        ? 'Ask me which queues need attention, where staff should focus, or what service activity looks unusual.'
+        : 'Ask me about your queue position, wait time, or whether another service may be faster.',
       source: 'local',
     },
   ]);
@@ -48,8 +58,8 @@ export default function QueueAssistant({ className = '', fullHeight = false }) {
     <section className={`assistant-card ${fullHeight ? 'assistant-card-large' : ''} ${className}`.trim()}>
       <div className="assistant-header">
         <div>
-          <p className="subtitle uppercase">AI Queue Assistant</p>
-          <h3>Ask about your queue</h3>
+          <p className="subtitle uppercase">{isAdmin ? 'AI Admin Assistant' : 'AI Queue Assistant'}</p>
+          <h3>{isAdmin ? 'Ask about queue operations' : 'Ask about your queue'}</h3>
         </div>
         <span className="assistant-status">Read-only</span>
       </div>
@@ -71,7 +81,7 @@ export default function QueueAssistant({ className = '', fullHeight = false }) {
       {chatError && <div className="alert alert-error">{chatError}</div>}
 
       <div className="assistant-starters">
-        {STARTER_QUESTIONS.map((question) => (
+        {starterQuestions.map((question) => (
           <button key={question} type="button" onClick={() => askAssistant(question)} disabled={chatLoading}>
             {question}
           </button>
@@ -86,7 +96,7 @@ export default function QueueAssistant({ className = '', fullHeight = false }) {
           type="text"
           value={chatInput}
           onChange={(event) => setChatInput(event.target.value)}
-          placeholder="Ask a queue status question"
+          placeholder={isAdmin ? 'Ask an admin queue operations question' : 'Ask a queue status question'}
           maxLength={500}
         />
         <Button type="submit" disabled={chatLoading || !chatInput.trim()}>

@@ -35,6 +35,7 @@ const ADMIN_NAV = [
   { id: 'admin-dashboard', label: 'Dashboard' },
   { id: 'admin-services', label: 'Services' },
   { id: 'admin-queue', label: 'Queue Manager' },
+  { id: 'admin-assistant', label: 'AI Assistant' },
   { id: 'admin-report', label: 'Reports'}
 ];
 
@@ -302,7 +303,7 @@ export default function App() {
       case 'user-status':
         return <QueueStatus activeQueue={activeQueue} services={services} queues={queues} estimate={waitEstimates[activeQueue?.serviceId]} onLeave={handleLeaveQueue} />;
       case 'user-assistant':
-        return <AIAssistant />;
+        return <AIAssistant role={user.role} />;
       case 'user-history':
         return <UserHistory history={history} currentQueues={userQueueMemberships} />;
       case 'admin-dashboard':
@@ -311,6 +312,8 @@ export default function App() {
         return <AdminServices services={services} onSaveService={handleSaveService} onDeleteService={handleDeleteService} />;
       case 'admin-queue':
         return <AdminQueue services={services} queues={queues} onServeNext={handleServeNext} />;
+      case 'admin-assistant':
+        return <AIAssistant role={user.role} />;
       case 'admin-report':
         return <AdminReports services={services} queues={queues} userStatsReport={userStatsReport} queueStatsReport={queueStatsReport} />;
       default:

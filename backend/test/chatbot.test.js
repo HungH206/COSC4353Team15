@@ -109,6 +109,21 @@ test('answers queue status questions from live QueueSmart data', async () => {
   assert.match(response.body.answer, /20 minutes/);
 });
 
+test('answers admin operations questions from live QueueSmart data', async () => {
+  const response = await request('/api/chatbot', {
+    method: 'POST',
+    body: JSON.stringify({ message: 'Which queue needs attention?' }),
+  }, adminToken);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.source, 'queuesmart-fallback');
+  assert.equal(response.body.smartFeature.groundedInLiveQueueData, true);
+  assert.equal(response.body.smartFeature.readOnly, true);
+  assert.equal(response.body.smartFeature.adminOperations, true);
+  assert.match(response.body.answer, /AI Help Desk/);
+  assert.match(response.body.answer, /3 waiting users|3 users/);
+});
+
 test('requires a non-empty chatbot message', async () => {
   const response = await request('/api/chatbot', {
     method: 'POST',
