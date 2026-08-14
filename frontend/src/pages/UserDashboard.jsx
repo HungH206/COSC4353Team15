@@ -5,7 +5,7 @@ import Badge from '../components/Badge.jsx';
 import Button from '../components/Button.jsx';
 import { ArrowRight } from 'lucide-react';
 
-export default function UserDashboard({ user, services, queues, notifs, activeQueue, onNavigate }) {
+export default function UserDashboard({ user, services, queues, notifs, activeQueue, waitEstimates = {}, onNavigate }) {
   const openServices = services.filter((svc) => svc.isOpen);
   const latestNotifs = notifs.slice(0, 3);
 
@@ -65,12 +65,12 @@ export default function UserDashboard({ user, services, queues, notifs, activeQu
         </div>
         <div className="service-list">
           {openServices.map((svc) => {
-            const wait = (queues[svc.id]?.length ?? 0) * svc.expectedDuration;
+            const wait = waitEstimates[svc.id]?.estimatedWait ?? (queues[svc.id]?.length ?? 0) * svc.expectedDuration;
             return (
               <div key={svc.id} className="service-card">
                 <div>
                   <h4>{svc.name}</h4>
-                  <p className="text-muted">{queues[svc.id]?.length ?? 0} waiting · ~{wait} min</p>
+                  <p className="text-muted">{queues[svc.id]?.length ?? 0} waiting · smart estimate ~{wait} min</p>
                 </div>
                 <Badge text={svc.priority} className={svc.priority === 'high' ? 'badge-danger' : svc.priority === 'medium' ? 'badge-warning' : 'badge-success'} />
                 <Button variant="ghost" onClick={() => onNavigate('user-join')}>Join</Button>

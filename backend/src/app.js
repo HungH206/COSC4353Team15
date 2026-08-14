@@ -36,7 +36,8 @@ export async function createApp(config) {
     history.log,          // real history logger now
     notifications.notify  // real notifier now, was dummyNotifier
   );
-  const timeEstimation = createTimeEstimationModule(auth, services.store, queue.store);
+  // added timeEstimation and chatbot modules
+  const timeEstimation = createTimeEstimationModule(auth, services.store, queue.store, config.db);
   const chatbot = createChatbotModule(config, auth, services.store, queue.store);
 
   app.get('/api/health', (_request, response) => {

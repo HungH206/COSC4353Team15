@@ -99,7 +99,7 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
       ]),
     },
     'service-activity': {
-      headers: ['Service', 'Description', 'Priority', 'Status', 'Created At', 'Expected Duration', 'Current Queue Length', 'Current Estimated Wait', 'Users Waiting', 'Served', 'Left / Cancelled', 'Total Interactions', 'Last Queue Activity'],
+      headers: ['Service', 'Description', 'Priority', 'Status', 'Created At', 'Expected Duration', 'Current Queue Length', 'Smart Estimated Wait', 'Users Waiting', 'Served', 'Left / Cancelled', 'Total Interactions', 'Last Queue Activity'],
       filename: 'service_activity_report.csv',
       rows: serviceActivity.map((s) => [
         s.name,
@@ -214,7 +214,7 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                     <th>Created At</th>
                     <th>Expected Duration</th>
                     <th>Current Queue Length</th>
-                    <th>Current Estimated Wait</th>
+                    <th>Smart Estimated Wait</th>
                     <th>Users Waiting</th>
                     <th>Served</th>
                     <th>Left / Cancelled</th>

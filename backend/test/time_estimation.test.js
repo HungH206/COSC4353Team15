@@ -293,9 +293,9 @@ test('smart logic calculates wait time dynamically from history', async () => {
   // Inject some history for "Smart Test Service"
   // Let's say the expected duration is 10, but reality is taking much longer (20, 20, 20)
   mockTables.history.push(
-    { message: 'Served for Smart Test Service', outcome: '20', status: 'served', createdat: '2023-01-01' },
-    { message: 'Served for Smart Test Service', outcome: '20', status: 'served', createdat: '2023-01-02' },
-    { message: 'Served for Smart Test Service', outcome: '20', status: 'served', createdat: '2023-01-03' }
+    { message: 'Served by Smart Test Service.', outcome: 'served', wait_minutes: 20, status: 'viewed', createdat: '2023-01-01' },
+    { message: 'Served by Smart Test Service.', outcome: 'served', wait_minutes: 20, status: 'viewed', createdat: '2023-01-02' },
+    { message: 'Served by Smart Test Service.', outcome: 'served', wait_minutes: 20, status: 'viewed', createdat: '2023-01-03' }
   );
 
   // Position 3 = 2 people ahead. 

@@ -15,13 +15,13 @@ export async function calculateSmartWaitTime(db, serviceName, position, fallback
   if (!db || typeof db.from !== 'function') {
     return peopleAhead * fallbackDuration;
   }
-
+// Fetch recent history for the service + Smart Feature of estimating wait time based on recent history
   try {
     const { data: recentHistory, error } = await db
       .from('history')
-      .select('outcome') 
+      .select('wait_minutes, outcome') 
       .like('message', `%${serviceName}%`)
-      .eq('status', 'served')
+      .eq('outcome', 'served')
       .order('createdat', { ascending: false })
       .limit(10);
 
@@ -30,7 +30,7 @@ export async function calculateSmartWaitTime(db, serviceName, position, fallback
     }
 
     const totalMinutes = recentHistory.reduce((sum, record) => {
-      const minutes = parseInt(record.outcome, 10);
+      const minutes = parseInt(record.wait_minutes ?? record.outcome, 10);
       return sum + (isNaN(minutes) ? fallbackDuration : minutes);
     }, 0);
 

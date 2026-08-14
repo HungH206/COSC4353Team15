@@ -42,12 +42,13 @@ class FileQueueStore {
     if (allQueues[serviceId].some((entry) => entry.userId === user.id)) {
       throw new Error('You are already in this queue.');
     }
-
+    //SMART FEATURE: Calculate estimated wait time based on position in queue and expected duration
     const entry = {
       id: randomUUID(),
       userId: user.id,
       name: user.name,
       joinedAt: new Date().toLocaleTimeString(),
+      joinedAtIso: new Date().toISOString(),
       status: 'waiting',
       position: allQueues[serviceId].length + 1,
     };
@@ -127,6 +128,7 @@ class DatabaseQueueStore {
     return queue;
   }
 
+  // Get all entries for a specific queue, ordered by position
   async _getQueueEntries(queueId) {
     const { data: entries, error } = await this.db
       .from('queueentry')
@@ -149,6 +151,7 @@ class DatabaseQueueStore {
         userId: e.userid,
         name: profile?.name || 'Unknown User',
         joinedAt: new Date(e.jointime).toLocaleTimeString(),
+        joinedAtIso: e.jointime,
         status: e.position === 1 ? 'almost_ready' : e.status,
         position: e.position
       };
@@ -192,6 +195,7 @@ class DatabaseQueueStore {
       userId: data.userid,
       name: user.name,
       joinedAt: new Date(data.jointime).toLocaleTimeString(),
+      joinedAtIso: data.jointime,
       status: data.status,
       position: data.position
     };
@@ -287,11 +291,14 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
       const index = serviceQueue.findIndex((entry) => entry.userId === request.user.id);
       if (index === -1) continue;
       const service = await serviceStore.find(serviceId);
+      const estWait = config.useDatabase && config.db
+        ? await calculateSmartWaitTime(config.db, service?.name, index + 1, service?.expectedDuration)
+        : calculateWaitTime(index + 1, service?.expectedDuration);
       memberships.push({
         serviceId,
         serviceName: service?.name ?? 'Unknown service',
         position: index + 1,
-        estWait: calculateWaitTime(index + 1, service?.expectedDuration),
+        estWait,
         entry: serviceQueue[index],
         queue: serviceQueue,
       });
@@ -376,8 +383,9 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
         //SMART FEATURE ACTUAL TIME CALCULATION
         let actualWaitMinutes = service.expectedDuration;
 
-        if (servedUser.jointime) {
-          const joinDate = new Date(servedUser.jointime);
+        const joinedAt = servedUser.joinedAtIso ?? servedUser.jointime;
+        if (joinedAt) {
+          const joinDate = new Date(joinedAt);
           if (!isNaN(joinDate.getTime())) {
             const serveTime = Date.now();
             // Calculate the actual elapsed time in minutes
@@ -386,7 +394,7 @@ export async function createQueueModule(config, auth, serviceStore, historyLogge
         }
 
         await runSideEffect(
-          () => historyLogger(servedUser.userId, service.name, service.expectedDuration, 'served'),
+          () => historyLogger(servedUser.userId, service.name, actualWaitMinutes, 'served'),
           'Queue serve history',
         );
         await runSideEffect(

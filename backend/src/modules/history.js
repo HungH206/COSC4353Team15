@@ -90,6 +90,7 @@ class DatabaseHistoryStore {
       .map(mapDatabaseHistory);
   }
 
+  // Create a new history record in the database + wait time estimation based on recent history for the service
   async create(record) {
     const insertData = {
       id: record.id,
@@ -97,6 +98,7 @@ class DatabaseHistoryStore {
       message: `${record.outcome === 'served' ? 'Served by' : 'Left'} ${record.serviceName}.`,
       status: 'viewed',
       outcome: record.outcome,
+      wait_minutes: record.waitMinutes,
       createdat: record.createdAt,
     };
 

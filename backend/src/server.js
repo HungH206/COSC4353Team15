@@ -11,8 +11,12 @@ try {
     }
   }
   const app = await createApp(config);
-  app.listen(config.port, () => {
+  const server = app.listen(config.port, () => {
     console.log(`QueueSmart API listening on http://localhost:${config.port}`);
+  });
+  server.on('error', (error) => {
+    console.error(`Unable to keep API server running: ${error.message}`);
+    process.exit(1);
   });
 } catch (error) {
   if (error.message?.includes('schema cache')) {

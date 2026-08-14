@@ -1,112 +1,267 @@
 # QueueSmart
 
-QueueSmart is a full-stack virtual queue management application developed by
-COSC 4353 Team 15. Users can register, sign in, browse available services, join
-or leave a queue, view their estimated wait, and receive queue notifications.
-Administrators can manage services, inspect queues, and serve the next user.
+QueueSmart is a full-stack virtual queue management system developed by COSC
+4353 Team 15. It allows users to join service queues, track their position,
+receive notifications, review queue history, and ask an AI assistant about their
+queue status. Administrators can manage services, serve users in queue order,
+monitor queue activity, and export reports.
 
-## Technology
+The project focuses on practical system integration: authentication, queue
+operations, database-backed persistence, reporting, smart wait-time estimation,
+and API-based AI assistance.
 
-- Frontend: React 19, Vite, and Lucide React
-- Backend: Node.js, Express 5, and native Node.js cryptography
+## Main Functionality
+
+### User Features
+
+- Register and sign in with a secure account.
+- View available services and their estimated waits.
+- Join one open service queue at a time.
+- Leave a queue before being served.
+- Track current queue position, people ahead, and smart estimated wait.
+- Receive notifications when joining, being served, or becoming next.
+- Review personal queue history with paginated history rows.
+- Use the AI Queue Assistant to ask natural-language questions about queue
+  status.
+
+### Administrator Features
+
+- Create, edit, open/close, and delete services.
+- Manage service details such as name, description, priority, and expected
+  duration.
+- View active queues by service.
+- Serve the next user in first-in, first-out order.
+- View dashboard metrics for open services, queued users, and estimated load.
+- Generate and export reports for users, services, queues, and activity.
+
+## Smart Features
+
+### Smart Wait-Time Estimation
+
+QueueSmart includes dynamic wait-time estimation. The original fallback rule is:
+
+```text
+estimated wait = people ahead * expected service duration
+```
+
+The smart version improves this by using actual historical served wait times
+stored in the database. When enough historical records exist for a service, the
+backend estimates future waits from recent real queue performance instead of
+only using the static service duration.
+
+The smart wait feature is visible in:
+
+- Join Queue service dropdowns
+- Queue Status page
+- User Dashboard service cards
+- Service and Queue Activity reports
+- AI Queue Assistant responses
+
+When a user is served, QueueSmart logs the actual elapsed wait time. This lets
+future estimates become more accurate as the system collects more history.
+
+### AI Queue Assistant
+
+QueueSmart includes a read-only AI assistant for queue questions. It is available
+from the user `AI Assistant` tab.
+
+Users can ask questions such as:
+
+```text
+How long is my wait?
+Am I next?
+Should I stay in this queue?
+Which service is faster?
+What are you?
+```
+
+The assistant is grounded in live QueueSmart data. It receives queue position,
+people ahead, service status, queue length, and smart wait estimates from the
+backend. It does not directly join, leave, serve, delete, or modify queues.
+
+If an AI API key and model are configured, the backend calls the AI API. If not,
+QueueSmart falls back to a local deterministic response so the project remains
+testable without external AI access.
+
+Required AI environment variables:
+
+```env
+AI_API_KEY=your_api_key
+AI_CHAT_MODEL=gpt-5-mini
+```
+
+The backend response includes a source label:
+
+- `ai-api`: response came from the configured AI model
+- `queuesmart-fallback`: response came from the local fallback logic
+
+## Reporting
+
+Administrators can access the `Reports` page and export CSV files.
+
+### User History Report
+
+Shows user/customer queue participation history:
+
+- Name
+- Email
+- Service requested
+- Join time
+- Outcome: served or left
+- Outcome timestamp
+
+The table is paginated at 10 rows per page for readability. CSV export includes
+the full report.
+
+### Service and Queue Activity Report
+
+Shows one row per service and combines service details with queue activity:
+
+- Service name
+- Description
+- Priority
+- Open/closed status
+- Created at
+- Expected duration
+- Current queue length
+- Smart estimated wait
+- Users currently waiting
+- Users served
+- Users left/cancelled
+- Total queue interactions
+- Last queue activity
+
+In this project, "queue activity" means activity inside each service queue:
+users joining, waiting, leaving, and being served. It is not a full audit log of
+every administrative open/close/delete action.
+
+### Queue Statistics Report
+
+Shows queue usage statistics:
+
+- Total joined
+- Users served
+- Percentage left
+- Average wait
+- Estimation error compared with expected duration
+
+## Technology Stack
+
+- Frontend: React 19, Vite, Lucide React
+- Backend: Node.js, Express 5
 - Authentication: signed bearer tokens and salted `scrypt` password hashes
-- Development storage: local JSON files under `backend/data`
+- Database: Supabase/Postgres for deployed/database mode
+- Local development storage: JSON files under `backend/data`
 - Testing: Node.js test runner and HTTP integration tests
+- Deployment target: Vercel serverless API plus Vite static frontend
 
-## Project structure
+## Project Structure
 
 ```text
 COSC4353Team15/
+├── api/
+│   └── index.js                  # Vercel serverless Express entrypoint
 ├── backend/
-│   ├── data/                    # Local JSON data; generated at runtime
+│   ├── data/                     # Local JSON data for file mode
+│   ├── sql/
+│   │   └── 001_core_tables.sql   # Supabase/Postgres schema
 │   ├── src/
 │   │   ├── modules/
 │   │   │   ├── auth.js
-│   │   │   ├── services.js
+│   │   │   ├── chatbot.js
+│   │   │   ├── history.js
+│   │   │   ├── notifs.js
 │   │   │   ├── queue.js
-│   │   │   ├── time_estimation.js
-│   │   │   └── notifs.js
-│   │   ├── app.js              # Express application and module wiring
+│   │   │   ├── reports.js
+│   │   │   ├── services.js
+│   │   │   └── time_estimation.js
+│   │   ├── app.js
 │   │   ├── config.js
 │   │   └── server.js
 │   └── test/
-└── frontend/
-    ├── src/
-    │   ├── api/                 # Backend API clients
-    │   ├── components/
-    │   ├── pages/
-    │   └── App.jsx
-    └── vite.config.js
+├── frontend/
+│   ├── src/
+│   │   ├── api/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── App.jsx
+│   │   └── App.css
+│   └── vite.config.js
+├── package.json
+└── vercel.json
 ```
 
-## Implemented modules
+## Backend Modules
 
 ### Authentication
 
 - User registration and login
 - User and administrator roles
-- Basic input validation
-- Salted password hashing
-- Signed, expiring authentication tokens
-- Session restoration and logout in the frontend
+- Input validation
+- Salted password hashing with Node.js crypto
+- Signed expiring bearer tokens
+- Session restoration through `/api/auth/me`
 
-### Service management
+### Services
 
 - Authenticated service listing
-- Administrator creation, editing, opening/closing, and deletion
-- Service name, description, expected duration, and priority level
-- Open services displayed on the user Join Queue page
+- Admin-only create, edit, open/close, and delete
+- Service fields: name, description, expected duration, priority, open status
 
-### Queue management
+### Queues
 
-- Users can join and leave an open service queue
-- Queue membership is restored after a page refresh
-- Administrators can view queues and serve the next user
-- Users are served in first-in, first-out arrival order
+- Users join and leave service queues
+- Admins serve the next user
+- FIFO queue behavior per service
+- Queue membership restoration after refresh
+- Notifications and history side effects when queue events occur
 
-Service priority is stored and displayed. It does not currently reorder users
-within an individual service queue because queue entries do not have their own
-priority value.
+### Time Estimation
 
-### Wait-time estimation
-
-Wait time is calculated by the backend using:
-
-```text
-estimated wait = (position - 1) * expected service duration
-```
-
-The Join Queue page displays the prospective wait before joining. The Queue
-Status page displays the authenticated user's backend-calculated position,
-people ahead, and estimated wait.
+- Fallback static estimates from expected service duration
+- Smart estimates from recent actual served wait times
+- API endpoints for all estimates or one service estimate
 
 ### Notifications
 
-- Joining a queue creates a notification
-- When an administrator serves the current user, the next user is notified
-- Users can retrieve and mark their own notifications as read
-- The frontend polls periodically for new notifications
-- Notifications appear in the header panel and user dashboard
+- Join confirmation notifications
+- Served-user notification
+- Next-user notification
+- Mark notification as read
+- Frontend polling for updates
 
 ### History
 
-- Leaving a queue records a `left` outcome
-- Being served records a `served` outcome
-- Records include service name, estimated wait, outcome, and timestamp
-- Users can retrieve only their own history
-- The Queue History page loads authenticated backend records
+- Records served and left outcomes
+- Stores service name, outcome, timestamp, and wait minutes
+- Users can only view their own history
+
+### Reports
+
+- Admin-only report endpoints
+- User history report
+- Service and queue activity report
+- Queue statistics report
+- CSV export from the frontend
+
+### Chatbot
+
+- Authenticated read-only chatbot endpoint
+- Uses live queue/service data and smart wait estimates
+- Optional AI API integration
+- Local fallback response for test/demo reliability
 
 ## Prerequisites
 
-- Node.js 20.19 or newer
+- Node.js 22.x recommended
 - npm
 - Git
+- Supabase project for database/deployment mode
+- Optional OpenAI-compatible API key for the AI assistant
 
 ## Installation
 
-Clone the repository and install dependencies in both applications:
-
-```powershell
+```bash
 git clone https://github.com/HungH206/COSC4353Team15.git
 cd COSC4353Team15
 
@@ -117,140 +272,162 @@ cd ../frontend
 npm install
 ```
 
-## Backend configuration
+## Backend Configuration
 
-Create the local environment file:
+Create a backend environment file:
 
-```powershell
+```bash
 cd backend
-Copy-Item .env.example .env
+cp .env.example .env
 ```
 
-Edit `backend/.env`:
+Example local configuration:
 
 ```env
 PORT=3000
 JWT_SECRET=replace-this-with-a-random-secret-at-least-32-characters
 TOKEN_TTL_SECONDS=3600
+
 USE_DATABASE=false
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+
 DATA_FILE=./data/users.json
-
-ADMIN_NAME=QueueSmart Administrator
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=choose-a-password
-
-DEMO_USER_NAME=Demo User
-DEMO_USER_EMAIL=user1@example.com
-DEMO_USER_PASSWORD=password123
-```
-
-The backend also uses these optional paths, which have sensible defaults:
-
-```env
 SERVICES_FILE=./data/services.json
 QUEUES_FILE=./data/queues.json
 HISTORY_FILE=./data/history.json
 NOTIFICATIONS_FILE=./data/notifications.json
+
+ADMIN_NAME=QueueSmart Administrator
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=admin123
+
+DEMO_USER_NAME=Demo User
+DEMO_USER_EMAIL=user1@example.com
+DEMO_USER_PASSWORD=password123
+
+AI_API_KEY=
+AI_CHAT_MODEL=
 ```
 
-For the Assignment 4 RDBMS implementation, run
-`backend/sql/001_core_tables.sql` in the Supabase SQL editor, or set
-`DATABASE_URL` and run `npm run db:init` from `backend/`. Then set:
+For Supabase/Postgres mode:
 
 ```env
 USE_DATABASE=true
-SUPABASE_URL=<your-project-url>
-SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+DATABASE_URL=your_postgres_connection_string
 ```
 
-Database mode stores data in these Supabase/Postgres tables:
-`usercredentials`, `userprofile`, `service`, `queue`, `queueentry`, and
-`history`. Notifications are stored in `history` rows with `outcome = null`.
-Passwords are salted `scrypt` hashes, never plain text.
+Run the schema in Supabase SQL editor or initialize through the backend:
 
-Use the Supabase `service_role` key only in `backend/.env`. Do not put it in the
-frontend `.env` file.
+```bash
+cd backend
+npm run db:init
+```
 
-Do not commit `.env`. The administrator and demo user are created on startup
-when their email addresses do not already exist. Changing a seeded password in
-`.env` does not automatically replace an existing password hash in
-the configured storage.
+The schema creates:
 
-## Running locally
+- `usercredentials`
+- `userprofile`
+- `service`
+- `queue`
+- `queueentry`
+- `history`
 
-Run the backend and frontend in separate terminals.
+The `history` table includes `wait_minutes`, which is required for smart
+wait-time estimation.
+
+Do not commit `.env` files. Use the Supabase service-role key only in the
+backend environment.
+
+## Running Locally
 
 Terminal 1:
 
-```powershell
+```bash
 cd backend
-npm run dev
+npm start
 ```
 
 Terminal 2:
 
-```powershell
+```bash
 cd frontend
 npm run dev
 ```
 
-Open the Vite URL printed in the second terminal, normally
-`http://localhost:5173`.
+Open the Vite URL, usually:
 
-During development, Vite forwards `/api` requests to
-`http://localhost:3000`, so both servers must be running.
+```text
+http://localhost:5173
+```
 
-The default demonstration account is:
+During development, Vite proxies `/api` requests to:
+
+```text
+http://localhost:3000
+```
+
+Default demo user:
 
 ```text
 Email: user1@example.com
 Password: password123
 Role: user
-
 ```
 
-Administrator credentials come from `backend/.env`.
+Admin credentials come from `backend/.env`.
 
-## First-time usage
+Changing a seeded password in `.env` does not automatically update an existing
+password hash in local files or Supabase. If the account already exists, use the
+stored password or reset/recreate the account in the configured storage.
 
-1. Start both servers.
-2. Sign in with the administrator account.
-3. Open Service Management.
-4. Create at least one service and leave its queue marked open.
-5. Sign out and sign in as a user.
-6. Open Join Queue and select the new service.
+## First-Time Usage
 
-Services are loaded from `backend/data/services.json`; a new installation starts
-without services until an administrator creates one.
+1. Start the backend and frontend.
+2. Log in as an administrator.
+3. Open `Services`.
+4. Create at least one open service.
+5. Log out and sign in as a user.
+6. Open `Join Queue`.
+7. Join a queue and track it from `Queue Status`.
+8. Ask queue questions from `AI Assistant`.
+9. Return as admin to serve users and view reports.
 
-## API overview
+## API Overview
 
-The default API base URL is `http://localhost:3000/api`.
+The default local API base URL is:
+
+```text
+http://localhost:3000/api
+```
 
 | Method | Endpoint | Access | Purpose |
 | --- | --- | --- | --- |
 | `GET` | `/health` | Public | Check API health |
 | `POST` | `/auth/register` | Public | Register a user |
 | `POST` | `/auth/login` | Public | Log in and receive a token |
-| `GET` | `/auth/me` | Authenticated | Restore the current user |
-| `GET` | `/auth/admin-check` | Administrator | Verify administrator access |
+| `GET` | `/auth/me` | Authenticated | Restore current user |
+| `GET` | `/auth/admin-check` | Administrator | Verify admin access |
 | `GET` | `/services` | Authenticated | List services |
-| `POST` | `/services` | Administrator | Create a service |
-| `PUT` | `/services/:id` | Administrator | Update a service |
-| `DELETE` | `/services/:id` | Administrator | Delete a service |
-| `GET` | `/queue` | Administrator | View every queue |
-| `GET` | `/queue/mine` | Authenticated | View personal queue membership |
+| `POST` | `/services` | Administrator | Create service |
+| `PUT` | `/services/:id` | Administrator | Update service |
+| `DELETE` | `/services/:id` | Administrator | Delete service |
+| `GET` | `/queue` | Administrator | View all queues |
+| `GET` | `/queue/mine` | Authenticated | View current user's queue |
 | `GET` | `/queue/summary` | Authenticated | View queue counts |
-| `POST` | `/queue/join` | Authenticated | Join a service queue |
-| `POST` | `/queue/leave` | Authenticated | Leave a service queue |
-| `POST` | `/queue/:serviceId/serve` | Administrator | Serve the next user |
-| `GET` | `/time-estimation` | Authenticated | Get all service estimates |
-| `GET` | `/time-estimation/:serviceId` | Authenticated | Get one estimate |
-| `GET` | `/notifications` | Authenticated | List personal notifications |
-| `PATCH` | `/notifications/:id/read` | Authenticated | Mark a notification read |
-| `GET` | `/history` | Authenticated | List personal queue history |
+| `POST` | `/queue/join` | Authenticated | Join queue |
+| `POST` | `/queue/leave` | Authenticated | Leave queue |
+| `POST` | `/queue/:serviceId/serve` | Administrator | Serve next user |
+| `GET` | `/time-estimation` | Authenticated | Get all smart wait estimates |
+| `GET` | `/time-estimation/:serviceId` | Authenticated | Get one smart wait estimate |
+| `GET` | `/notifications` | Authenticated | List notifications |
+| `PATCH` | `/notifications/:id/read` | Authenticated | Mark notification read |
+| `GET` | `/history` | Authenticated | List personal history |
+| `GET` | `/reports/user-stats` | Administrator | User history report |
+| `GET` | `/reports/queue-stats` | Administrator | Queue and service activity stats |
+| `POST` | `/chatbot` | Authenticated | Ask the AI Queue Assistant |
 
 Authenticated requests use:
 
@@ -258,29 +435,97 @@ Authenticated requests use:
 Authorization: Bearer <token>
 ```
 
-## Testing and validation
+Example chatbot request:
 
- Unit tests include: auth.test.js; notifications.test.js; queue.test.js; services.test.js, history_test.js; and time_estimation.test.js. Run all backend integration tests:
+```bash
+curl -X POST http://localhost:3000/api/chatbot \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer <token>" \
+  -d '{"message":"How long is my wait?"}'
+```
 
-```powershell
+## Deployment On Vercel
+
+The repository is configured for Vercel:
+
+- `vercel.json` builds `frontend`
+- `api/index.js` exposes the Express backend as a serverless API
+- `/api/*` requests are rewritten to the backend
+- all other requests serve the React app
+
+Set these environment variables in Vercel:
+
+```env
+JWT_SECRET=long_random_secret_at_least_32_chars
+TOKEN_TTL_SECONDS=3600
+
+USE_DATABASE=true
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+DATABASE_URL=your_postgres_connection_string
+
+ADMIN_NAME=QueueSmart Administrator
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=your_admin_password
+
+DEMO_USER_NAME=Demo User
+DEMO_USER_EMAIL=user1@example.com
+DEMO_USER_PASSWORD=password123
+
+AI_API_KEY=your_ai_api_key
+AI_CHAT_MODEL=gpt-5-mini
+```
+
+Do not use file-mode storage for deployed Vercel data. Serverless file storage
+is not reliable for persistent application state. Use Supabase/Postgres for
+deployment.
+
+## Testing
+
+Backend tests:
+
+```bash
 cd backend
 npm test
 ```
 
-Validate the frontend:
+Frontend validation:
 
-```powershell
+```bash
 cd frontend
 npm run lint
 npm run build
 ```
 
-## Data and development limitations
+The backend test suite includes integration coverage for:
 
-- JSON files are suitable for this course project and local development, but
-  they are not a replacement for a production database.
-- Files under `backend/data/*.json` are ignored by Git, so teammates have
-  independent local data.
-- There is no real email or SMS delivery; notifications are stored and returned
-  through the application.
-- Predictable demonstration credentials must not be used in production.
+- Authentication
+- Services
+- Queue operations
+- Notifications
+- History
+- Time estimation
+- Smart wait-time calculation
+- AI assistant fallback behavior
+- Database integration with mocked Supabase-style clients
+
+## Known Limitations
+
+- The AI assistant is read-only and does not perform queue actions.
+- File-mode JSON storage is for local development only.
+- Service priority is stored and displayed, but it does not reorder users inside
+  a queue.
+- Notifications are in-app only; there is no email or SMS delivery.
+- Queue activity reports measure activity inside queues, not full audit logs for
+  every admin action such as service deletion.
+- Historical smart wait estimates improve as more served records are collected.
+  New services with no history fall back to expected duration.
+
+## Security Notes
+
+- Passwords are stored as salted `scrypt` hashes.
+- Authentication uses signed bearer tokens.
+- Supabase service-role keys must only be stored in backend or Vercel server
+  environment variables.
+- Do not commit `.env` files or API keys.
+- Demo credentials are for development and presentation only.

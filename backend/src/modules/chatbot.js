@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { calculateWaitTime } from './time_estimation.js';
+import { calculateSmartWaitTime, calculateWaitTime } from './time_estimation.js';
 
 const MAX_MESSAGE_LENGTH = 500;
 
@@ -7,12 +7,16 @@ function normalizeMessage(value) {
   return typeof value === 'string' ? value.trim().slice(0, MAX_MESSAGE_LENGTH) : '';
 }
 
-function buildEstimates(services, queues, userId) {
-  return services.map((service) => {
+// Build estimates for all services, including queue length, position, and estimated wait time
+async function buildEstimates(config, services, queues, userId) {
+  return Promise.all(services.map(async (service) => {
     const serviceQueue = queues[service.id] ?? [];
     const userIndex = serviceQueue.findIndex((entry) => entry.userId === userId);
     const inQueue = userIndex >= 0;
     const position = inQueue ? userIndex + 1 : serviceQueue.length + 1;
+    const estimatedWait = config.useDatabase && config.db
+      ? await calculateSmartWaitTime(config.db, service.name, position, service.expectedDuration)
+      : calculateWaitTime(position, service.expectedDuration);
 
     return {
       serviceId: service.id,
@@ -23,9 +27,9 @@ function buildEstimates(services, queues, userId) {
       inQueue,
       position,
       peopleAhead: position - 1,
-      estimatedWait: calculateWaitTime(position, service.expectedDuration),
+      estimatedWait,
     };
-  });
+  }));
 }
 
 function findActiveEstimate(estimates) {
@@ -158,7 +162,7 @@ export function createChatbotModule(config, auth, serviceStore, queueStore) {
       }
 
       const [services, queues] = await Promise.all([serviceStore.all(), queueStore.read()]);
-      const estimates = buildEstimates(services, queues, request.user.id);
+      const estimates = await buildEstimates(config, services, queues, request.user.id);
       const aiResult = await callAiApi(config, request.user, message, estimates);
       const answer = aiResult.answer ?? formatFallbackAnswer(message, estimates);
 

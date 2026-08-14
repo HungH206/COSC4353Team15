@@ -57,7 +57,7 @@ export default function QueueStatus({ activeQueue, services, queues, estimate, o
           </div>
           <div>
             <h3>~{estWait}</h3>
-            <p>min est. wait</p>
+            <p>min smart wait</p>
           </div>
           <div>
             <h3>{queue.length}</h3>

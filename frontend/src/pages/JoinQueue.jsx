@@ -79,7 +79,7 @@ export default function JoinQueue({ services, waitEstimates, activeQueue, onJoin
               <option value="">Choose a service...</option>
               {openServices.map((svc) => (
                 <option key={svc.id} value={svc.id}>
-                  {svc.name} (Estimated wait: {waitEstimates[svc.id]?.estimatedWait ?? 0} mins)
+                  {svc.name} (Smart estimate: {waitEstimates[svc.id]?.estimatedWait ?? 0} mins)
                 </option>
               ))}
             </select>

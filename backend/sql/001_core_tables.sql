@@ -55,10 +55,12 @@ create table if not exists history (
   message text not null check (char_length(message) between 1 and 1000),
   createdat timestamptz not null default now(),
   status text not null default 'viewed' check (status in ('sent', 'viewed')),
-  outcome text check (outcome in ('served', 'left'))
+  outcome text check (outcome in ('served', 'left')),
+  wait_minutes integer not null default 0 check (wait_minutes >= 0)
 );
 
 alter table history alter column outcome drop not null;
+alter table history add column if not exists wait_minutes integer not null default 0;
 update history set outcome = status where outcome is null and status in ('served', 'left');
 update history set status = 'viewed' where status in ('served', 'left');
 alter table history drop constraint if exists history_status_check;
@@ -129,6 +131,9 @@ begin
   end if;
   if not exists (select 1 from pg_constraint where conname = 'history_userid_length_check') then
     alter table history add constraint history_userid_length_check check (char_length(userid) between 1 and 64);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'history_wait_minutes_check') then
+    alter table history add constraint history_wait_minutes_check check (wait_minutes >= 0);
   end if;
 end $$;
 

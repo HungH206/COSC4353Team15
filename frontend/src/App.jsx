@@ -277,7 +277,7 @@ export default function App() {
     if (!user) return null;
     switch (page) {
       case 'user-dashboard':
-        return <UserDashboard user={user} services={services} queues={queues} notifs={notifs} activeQueue={activeQueue} onNavigate={setPage} />;
+        return <UserDashboard user={user} services={services} queues={queues} notifs={notifs} activeQueue={activeQueue} waitEstimates={waitEstimates} onNavigate={setPage} />;
       case 'user-join':
         return <JoinQueue services={services} waitEstimates={waitEstimates} activeQueue={activeQueue} onJoin={handleJoinQueue} onLeave={handleLeaveQueue} />;
       case 'user-status':
