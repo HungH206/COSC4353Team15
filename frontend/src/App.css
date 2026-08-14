@@ -166,12 +166,15 @@
 .main-content {
   margin-top: 1.5rem;
   flex: 1;
+  width: 100%;
+  max-width: 112rem;
 }
 
 .page-grid {
   display: grid;
   gap: 1.5rem;
   width: 100%;
+  min-width: 0;
 }
 
 .page-header {
@@ -205,7 +208,7 @@
 }
 
 .summary-cards {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .card,
@@ -223,6 +226,7 @@
   border: 1px solid var(--border);
   border-radius: 1.25rem;
   color: var(--card-foreground);
+  min-width: 0;
 }
 
 .card,
@@ -420,6 +424,10 @@
 
 .block-card {
   overflow: hidden;
+}
+
+.block-card-body {
+  min-width: 0;
 }
 
 .panel-card {
@@ -685,6 +693,7 @@ select:focus {
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
+  min-width: 0;
 }
 
 /* Make service-list-table behave like a classic table for report views
@@ -750,6 +759,7 @@ table.service-list-table td:first-child {
   border-radius: 1rem;
   background: var(--card);
   border: 1px solid transparent;
+  min-width: 0;
 }
 
 .service-list-row {
@@ -936,7 +946,7 @@ table.service-list-table td:first-child {
 .grid-2 {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
 .gap-sm {
@@ -944,13 +954,65 @@ table.service-list-table td:first-child {
 }
 
 .max-w-5xl {
+  max-width: 104rem;
+  width: 100%;
+}
+
+.reports-page {
+  width: min(100%, 112rem);
+}
+
+.reports-page .block-card {
+  width: 100%;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+table.report-table {
+  min-width: 980px;
+}
+
+table.report-table-wide {
+  min-width: 1680px;
+}
+
+table.report-table th:first-child,
+table.report-table td:first-child {
+  width: auto;
+}
+
+.max-w-4xl {
+  max-width: 96rem;
+  width: 100%;
+}
+
+.max-w-3xl {
   max-width: 88rem;
   width: 100%;
 }
 
-.max-w-4xl {
-  max-width: 72rem;
-  width: 100%;
+.pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+}
+
+.pagination-row-card {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .field-group {
@@ -1241,5 +1303,16 @@ select {
 
   .assistant-message {
     max-width: 100%;
+  }
+
+  .page-header.space-between,
+  .pagination-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pagination-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 }

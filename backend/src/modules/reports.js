@@ -1,4 +1,25 @@
 import { Router } from 'express';
+import fs from 'node:fs/promises';
+
+function parseServiceNameFromHistory(message, outcome) {
+  const prefix = outcome === 'served' ? 'Served by ' : 'Left ';
+  return message?.startsWith(prefix)
+    ? message.slice(prefix.length).replace(/\.$/, '')
+    : null;
+}
+
+function emptyCounts() {
+  return { joined: 0, served: 0, canceled: 0, waiting: 0 };
+}
+
+function latestIso(...values) {
+  const latest = values
+    .filter(Boolean)
+    .map((value) => new Date(value).getTime())
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => b - a)[0];
+  return latest ? new Date(latest).toISOString() : null;
+}
 
 class DatabaseReportsStore {
   constructor(db) {
@@ -106,7 +127,7 @@ class DatabaseReportsStore {
   async queueStats() {
     const { data: serviceRows, error: serviceError } = await this.db
       .from('service')
-      .select('id, name, expectedduration');
+      .select('id, name, description, priority, isopen, expectedduration, createdat');
     if (serviceError) throw new Error(`Database error: ${serviceError.message}`);
     const serviceIdByName = new Map(serviceRows.map((s) => [s.name, s.id]));
     const serviceNameById = new Map(serviceRows.map((s) => [s.id, s.name]));
@@ -126,18 +147,21 @@ class DatabaseReportsStore {
     const { data: historyRows, error: historyError } = await this.db
       .from('history')
       .select('userid, message, outcome, createdat')
-      .eq('outcome', 'served');
+      .in('outcome', ['served', 'left']);
     if (historyError) throw new Error(`Database error: ${historyError.message}`);
 
     //"Served by X." timestamps to served
     //queueentry rows by (userid, serviceName)
-    const prefix = 'Served by ';
     const servedTimesByKey = new Map();
+    const lastHistoryByServiceName = new Map();
     for (const row of historyRows) {
-      const serviceName = row.message?.startsWith(prefix)
-        ? row.message.slice(prefix.length).replace(/\.$/, '')
-        : null;
+      const serviceName = parseServiceNameFromHistory(row.message, row.outcome);
       if (!serviceName) continue;
+      lastHistoryByServiceName.set(
+        serviceName,
+        latestIso(lastHistoryByServiceName.get(serviceName), row.createdat),
+      );
+      if (row.outcome !== 'served') continue;
       const key = `${row.userid}::${serviceName}`;
       if (!servedTimesByKey.has(key)) servedTimesByKey.set(key, []);
       servedTimesByKey.get(key).push(new Date(row.createdat).getTime());
@@ -150,13 +174,13 @@ class DatabaseReportsStore {
       const serviceId = serviceIdByQueueId.get(entry.queueid);
       if (!serviceId) continue;
 
-      if (!countsByServiceId.has(serviceId)) {
-        countsByServiceId.set(serviceId, { joined: 0, served: 0, canceled: 0 });
-      }
+      if (!countsByServiceId.has(serviceId)) countsByServiceId.set(serviceId, emptyCounts());
       const counts = countsByServiceId.get(serviceId);
       counts.joined += 1;
       if (entry.status === 'served') counts.served += 1;
       else if (entry.status === 'canceled') counts.canceled += 1;
+      else if (entry.status === 'waiting') counts.waiting += 1;
+      counts.lastEntryAt = latestIso(counts.lastEntryAt, entry.jointime);
 
       if (entry.status !== 'served') continue;
       const serviceName = serviceNameById.get(serviceId);
@@ -186,7 +210,7 @@ class DatabaseReportsStore {
     }
 
     const rows = serviceRows.map((service) => {
-      const counts = countsByServiceId.get(service.id) || { joined: 0, served: 0, canceled: 0 };
+      const counts = countsByServiceId.get(service.id) || emptyCounts();
       const resolved = counts.served + counts.canceled;
 
       const waitSum = waitSumByServiceId.get(service.id) || 0;
@@ -203,8 +227,18 @@ class DatabaseReportsStore {
       return {
         id: service.id,
         name: service.name,
+        description: service.description,
+        priority: service.priority,
+        isOpen: service.isopen,
+        createdAt: service.createdat,
+        expectedDuration: service.expectedduration,
+        currentWaiting: counts.waiting,
+        currentWaitLoadMinutes: counts.waiting * (service.expectedduration ?? 0),
         joined: counts.joined,
         served: counts.served,
+        left: counts.canceled,
+        totalInteractions: counts.joined,
+        lastActivityAt: latestIso(counts.lastEntryAt, lastHistoryByServiceName.get(service.name)),
         leavePercent,
         avgWaitMinutes,
         errorMinutes,
@@ -216,11 +250,121 @@ class DatabaseReportsStore {
   }
 }
 
-function createStore(config) {
-  if (!(config.useDatabase && config.db)) {
-    throw new Error('Reports module currently requires database mode (config.useDatabase && config.db).');
+class FileReportsStore {
+  constructor(config) {
+    this.config = config;
   }
-  return new DatabaseReportsStore(config.db);
+
+  async initialize() {
+    return Promise.resolve();
+  }
+
+  async readJson(file, fallback) {
+    try {
+      return JSON.parse(await fs.readFile(file, 'utf8'));
+    } catch {
+      return fallback;
+    }
+  }
+
+  async userStats() {
+    const [users, history] = await Promise.all([
+      this.readJson(this.config.dataFile, []),
+      this.readJson(this.config.historyFile, []),
+    ]);
+    const userById = new Map(users.map((user) => [user.id, user]));
+
+    return history
+      .filter((record) => ['served', 'left'].includes(record.outcome))
+      .map((record) => {
+        const user = userById.get(record.userId);
+        return {
+          id: record.id,
+          name: user?.name ?? 'Unknown',
+          email: user?.email ?? null,
+          serviceName: record.serviceName ?? 'Unknown service',
+          joinedAt: record.createdAt,
+          outcome: record.outcome,
+          outcomeAt: record.createdAt,
+        };
+      })
+      .sort((a, b) => new Date(b.joinedAt) - new Date(a.joinedAt));
+  }
+
+  async queueStats() {
+    const [services, queues, history] = await Promise.all([
+      this.readJson(this.config.servicesFile, []),
+      this.readJson(this.config.queuesFile, {}),
+      this.readJson(this.config.historyFile, []),
+    ]);
+
+    const historyCountsByService = new Map();
+    for (const record of history) {
+      if (!record.serviceName) continue;
+      if (!historyCountsByService.has(record.serviceName)) {
+        historyCountsByService.set(record.serviceName, {
+          served: 0,
+          left: 0,
+          waitSum: 0,
+          waitCount: 0,
+          lastActivityAt: null,
+        });
+      }
+      const counts = historyCountsByService.get(record.serviceName);
+      if (record.outcome === 'served') {
+        counts.served += 1;
+        counts.waitSum += Number(record.waitMinutes) || 0;
+        counts.waitCount += 1;
+      } else if (record.outcome === 'left') {
+        counts.left += 1;
+      }
+      counts.lastActivityAt = latestIso(counts.lastActivityAt, record.createdAt);
+    }
+
+    return services
+      .map((service) => {
+        const currentWaiting = queues[service.id]?.length ?? 0;
+        const historyCounts = historyCountsByService.get(service.name) ?? {
+          served: 0,
+          left: 0,
+          waitSum: 0,
+          waitCount: 0,
+          lastActivityAt: null,
+        };
+        const joined = currentWaiting + historyCounts.served + historyCounts.left;
+        const resolved = historyCounts.served + historyCounts.left;
+        const avgWaitMinutes = historyCounts.waitCount > 0
+          ? historyCounts.waitSum / historyCounts.waitCount
+          : null;
+        const leavePercent = resolved > 0 ? Math.round((historyCounts.left / resolved) * 100) : null;
+
+        return {
+          id: service.id,
+          name: service.name,
+          description: service.description,
+          priority: service.priority,
+          isOpen: service.isOpen,
+          createdAt: service.createdAt,
+          expectedDuration: service.expectedDuration,
+          currentWaiting,
+          currentWaitLoadMinutes: currentWaiting * (service.expectedDuration ?? 0),
+          joined,
+          served: historyCounts.served,
+          left: historyCounts.left,
+          totalInteractions: joined,
+          lastActivityAt: historyCounts.lastActivityAt,
+          leavePercent,
+          avgWaitMinutes,
+          errorMinutes: avgWaitMinutes == null ? null : avgWaitMinutes - service.expectedDuration,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+}
+
+function createStore(config) {
+  if (config.useDatabase && config.db) return new DatabaseReportsStore(config.db);
+  return new FileReportsStore(config);
 }
 
 export async function createReportsModule(config, auth) {

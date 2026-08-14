@@ -7,8 +7,6 @@ import { ArrowRight } from 'lucide-react';
 
 export default function UserDashboard({ user, services, queues, notifs, activeQueue, onNavigate }) {
   const openServices = services.filter((svc) => svc.isOpen);
-  const totalWaiting = Object.values(queues).reduce((sum, queue) => sum + queue.length, 0);
-  const unread = notifs.filter((item) => !item.read).length;
   const latestNotifs = notifs.slice(0, 3);
 
   return (
