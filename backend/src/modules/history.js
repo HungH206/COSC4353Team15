@@ -68,6 +68,12 @@ function mapDatabaseHistory(record) {
   };
 }
 
+function isMissingWaitMinutesColumn(error) {
+  return error?.message?.includes("'wait_minutes' column")
+    || error?.message?.includes('wait_minutes')
+    || error?.code === 'PGRST204';
+}
+
 class DatabaseHistoryStore {
   constructor(db) {
     this.db = db;
@@ -92,21 +98,33 @@ class DatabaseHistoryStore {
 
   // Create a new history record in the database + wait time estimation based on recent history for the service
   async create(record) {
-    const insertData = {
+    const baseInsertData = {
       id: record.id,
       userid: record.userId,
       message: `${record.outcome === 'served' ? 'Served by' : 'Left'} ${record.serviceName}.`,
       status: 'viewed',
       outcome: record.outcome,
-      wait_minutes: record.waitMinutes,
       createdat: record.createdAt,
     };
 
-    const { data, error } = await this.db
+    const insertData = {
+      ...baseInsertData,
+      wait_minutes: record.waitMinutes,
+    };
+
+    let { data, error } = await this.db
       .from('history')
       .insert(insertData)
       .select()
       .single();
+
+    if (error && isMissingWaitMinutesColumn(error)) {
+      ({ data, error } = await this.db
+        .from('history')
+        .insert(baseInsertData)
+        .select()
+        .single());
+    }
 
     if (error) throw new Error(`Database error: ${error.message}`);
     return mapDatabaseHistory(data);

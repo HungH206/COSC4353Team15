@@ -45,7 +45,7 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
   const [activeTab, setActiveTab] = useState('user-history');
   const [userHistoryPage, setUserHistoryPage] = useState(1);
 
-  //listUserStatsReport() { id, name, email, serviceName, joinedAt, outcome: 'served'|'left', outcomeAt }
+  //listUserStatsReport() { id, name, email, serviceName, activityAt, outcome: 'served'|'left' }
   const userStats = userStatsReport;
   const totalUserHistoryPages = Math.max(1, Math.ceil(userStats.length / PAGE_SIZE));
   const safeUserHistoryPage = Math.min(userHistoryPage, totalUserHistoryPages);
@@ -88,14 +88,14 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
 
   const EXPORT_CONFIG = {
     'user-history': {
-      headers: ['Name', 'Email', 'Service Requested', 'Join Time', 'Status'],
+      headers: ['Name', 'Email', 'Service Requested', 'Activity Time', 'Outcome'],
       filename: 'user_history_report.csv',
       rows: userStats.map((u) => [
         u.name,
         u.email ?? '',
         u.serviceName,
-        formatDateTime(u.joinedAt),
-        `${u.outcome === 'served' ? 'Served' : 'Left'} (${formatDateTime(u.outcomeAt)})`,
+        formatDateTime(u.activityAt ?? u.joinedAt),
+        u.outcome === 'served' ? 'Served' : 'Left',
       ]),
     },
     'service-activity': {
@@ -172,7 +172,7 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                     <th style={{ textAlign: 'left' }}>Name</th>
                     <th>Email</th>
                     <th>Service Requested</th>
-                    <th>Join Time</th>
+                    <th>Activity Time</th>
                     <th>Outcome</th>
                   </tr>
                 </thead>
@@ -189,13 +189,12 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                       </td>
                       <td style={{ textAlign: 'left' }}>{u.email ?? '—'}</td>
                       <td style={{ textAlign: 'left' }}>{u.serviceName}</td>
-                      <td style={{ textAlign: 'center' }}>{formatDateTime(u.joinedAt)}</td>
+                      <td style={{ textAlign: 'center' }}>{formatDateTime(u.activityAt ?? u.joinedAt)}</td>
                       <td style={{ textAlign: 'center' }}>
                         <Badge
                           text={u.outcome === 'served' ? 'Served' : 'Left'}
                           className={u.outcome === 'served' ? 'badge-success' : 'badge-muted'}
                         />
-                        <div className="text-muted">{formatDateTime(u.outcomeAt)}</div>
                       </td>
                     </tr>
                   ))}
