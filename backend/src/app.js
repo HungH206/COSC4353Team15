@@ -9,6 +9,7 @@ import { createQueueModule } from './modules/queue.js';
 import { createNotificationModule } from './modules/notifs.js';
 import { createHistoryModule } from './modules/history.js';
 import { createTimeEstimationModule } from './modules/time_estimation.js';
+import { createChatbotModule } from './modules/chatbot.js';
 
 
 export async function createApp(config) {
@@ -34,6 +35,7 @@ export async function createApp(config) {
     notifications.notify  // real notifier now, was dummyNotifier
   );
   const timeEstimation = createTimeEstimationModule(auth, services.store, queue.store);
+  const chatbot = createChatbotModule(config, auth, services.store, queue.store);
 
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok' });
@@ -43,6 +45,7 @@ export async function createApp(config) {
   app.use('/api/services', services.router);
   app.use('/api/queue', queue.router);
   app.use('/api/time-estimation', timeEstimation.router);
+  app.use('/api/chatbot', chatbot.router);
   app.use('/api/notifications', notifications.router);
   app.use('/api/history', history.router);
 
