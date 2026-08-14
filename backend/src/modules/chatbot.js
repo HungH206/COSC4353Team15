@@ -42,6 +42,53 @@ function findShortestOpenEstimate(estimates) {
     .sort((first, second) => first.estimatedWait - second.estimatedWait)[0] ?? null;
 }
 
+function formatServiceHealth(service, estimate) {
+  return {
+    serviceId: service.id,
+    serviceName: service.name,
+    isOpen: service.isOpen,
+    priority: service.priority,
+    expectedDuration: service.expectedDuration,
+    currentWaiting: estimate.queueLength,
+    estimatedWaitForNewArrival: estimate.estimatedWait,
+    waitLoadMinutes: estimate.queueLength * service.expectedDuration,
+  };
+}
+
+function buildAdminOperations(services, estimates) {
+  const estimatesByServiceId = new Map(estimates.map((estimate) => [estimate.serviceId, estimate]));
+  const serviceHealth = services.map((service) => formatServiceHealth(
+    service,
+    estimatesByServiceId.get(service.id) ?? {
+      serviceId: service.id,
+      serviceName: service.name,
+      isOpen: service.isOpen,
+      queueLength: 0,
+      estimatedWait: 0,
+    },
+  ));
+
+  const openServices = serviceHealth.filter((service) => service.isOpen);
+  const closedServices = serviceHealth.filter((service) => !service.isOpen);
+  const busiestService = [...serviceHealth].sort((first, second) => second.currentWaiting - first.currentWaiting)[0] ?? null;
+  const highestWaitLoadService = [...serviceHealth].sort((first, second) => second.waitLoadMinutes - first.waitLoadMinutes)[0] ?? null;
+  const highestNewArrivalWaitService = [...serviceHealth].sort((first, second) => second.estimatedWaitForNewArrival - first.estimatedWaitForNewArrival)[0] ?? null;
+  const totalWaiting = serviceHealth.reduce((sum, service) => sum + service.currentWaiting, 0);
+  const totalWaitLoadMinutes = serviceHealth.reduce((sum, service) => sum + service.waitLoadMinutes, 0);
+
+  return {
+    totalServices: serviceHealth.length,
+    openServices: openServices.length,
+    closedServices: closedServices.length,
+    totalWaiting,
+    totalWaitLoadMinutes,
+    busiestService,
+    highestWaitLoadService,
+    highestNewArrivalWaitService,
+    services: serviceHealth,
+  };
+}
+
 function formatFallbackAnswer(message, estimates) {
   const active = findActiveEstimate(estimates);
   const shortest = findShortestOpenEstimate(estimates);
@@ -74,11 +121,53 @@ function formatFallbackAnswer(message, estimates) {
   return `You are #${active.position} in line for ${active.serviceName}. There ${active.peopleAhead === 1 ? 'is' : 'are'} ${active.peopleAhead} ${active.peopleAhead === 1 ? 'person' : 'people'} ahead of you, and your estimated wait is about ${active.estimatedWait} minutes.`;
 }
 
-function buildPrompt(user, message, estimates) {
+function formatAdminFallbackAnswer(message, operations) {
+  const lowered = message.toLowerCase();
+  const busiest = operations.busiestService;
+  const waitLoad = operations.highestWaitLoadService;
+  const newArrivalWait = operations.highestNewArrivalWaitService;
+
+  if (operations.totalServices === 0) {
+    return 'There are no services configured yet, so there is no queue activity to summarize.';
+  }
+
+  if (operations.totalWaiting === 0) {
+    return `All queues are currently clear. ${operations.openServices} services are open and ${operations.closedServices} are closed.`;
+  }
+
+  if (lowered.includes('staff') || lowered.includes('focus') || lowered.includes('attention') || lowered.includes('priority')) {
+    return `Focus on ${waitLoad.serviceName} first. It has ${waitLoad.currentWaiting} waiting ${waitLoad.currentWaiting === 1 ? 'user' : 'users'} and about ${waitLoad.waitLoadMinutes} minutes of current wait load.`;
+  }
+
+  if (lowered.includes('busy') || lowered.includes('busiest') || lowered.includes('load')) {
+    return `${busiest.serviceName} is the busiest queue with ${busiest.currentWaiting} waiting ${busiest.currentWaiting === 1 ? 'user' : 'users'}. The highest wait load is ${waitLoad.serviceName} at about ${waitLoad.waitLoadMinutes} minutes.`;
+  }
+
+  if (lowered.includes('wait') || lowered.includes('long')) {
+    return `${newArrivalWait.serviceName} has the longest estimated wait for a new arrival at about ${newArrivalWait.estimatedWaitForNewArrival} minutes. Across all services, ${operations.totalWaiting} users are waiting.`;
+  }
+
+  if (lowered.includes('what are you')) {
+    return 'I am the QueueSmart Admin AI Assistant. I summarize queue load, flag bottlenecks, and suggest where admins should focus next without changing queue records.';
+  }
+
+  return `There are ${operations.totalWaiting} users waiting across ${operations.openServices} open services. The main queue to watch is ${waitLoad.serviceName}, with ${waitLoad.currentWaiting} waiting and about ${waitLoad.waitLoadMinutes} minutes of wait load.`;
+}
+function buildPrompt(user, message, estimates, operations = null) {
+  const isAdmin = user.role === 'admin';
   return [
     {
       role: 'system',
-      content: [
+      content: (isAdmin ? [
+        'You are QueueSmart Admin AI Assistant.',
+        'Answer admin queue operations questions using only the provided QueueSmart data.',
+        'Help admins understand queue load, bottlenecks, service status, wait-load risk, and where staff should focus next.',
+        'You are read-only: do not claim that you served users, changed services, deleted queues, opened queues, or closed queues.',
+        'Give direct operational recommendations, but frame them as suggestions for the admin to review.',
+        'Keep answers concise: 2-4 short sentences unless the admin asks for a list.',
+        'Do not mention raw JSON or internal field names unless the admin asks for technical detail.',
+        'For "what are you", briefly say you are the QueueSmart Admin AI Assistant and mention operations summaries and bottleneck detection.',
+      ] : [
         'You are QueueSmart AI Queue Assistant.',
         'Answer queue status questions using only the provided QueueSmart data.',
         'Do not invent queue positions, times, services, policies, or user actions.',
@@ -89,7 +178,7 @@ function buildPrompt(user, message, estimates) {
         'Prefer natural phrases like "you are first in line", "no one is ahead of you", and "about 10 minutes".',
         'For "what are you", briefly say you are the QueueSmart AI Assistant and mention one or two things you can help with.',
         'For advice questions, give a direct recommendation first, then one short reason.',
-      ].join(' '),
+      ]).join(' '),
     },
     {
       role: 'user',
@@ -97,12 +186,13 @@ function buildPrompt(user, message, estimates) {
         user: { id: user.id, name: user.name, role: user.role },
         question: message,
         queueStatus: estimates,
+        adminOperations: operations,
       }),
     },
   ];
 }
 
-async function callAiApi(config, user, message, estimates) {
+async function callAiApi(config, user, message, estimates, operations = null) {
   if (!config.aiApiKey || !config.aiChatModel) {
     return { answer: null, error: 'AI_API_KEY and AI_CHAT_MODEL must both be set.' };
   }
@@ -119,7 +209,7 @@ async function callAiApi(config, user, message, estimates) {
       },
       body: JSON.stringify({
         model: config.aiChatModel,
-        messages: buildPrompt(user, message, estimates),
+        messages: buildPrompt(user, message, estimates, operations),
         max_completion_tokens: 300,
         reasoning_effort: 'minimal',
       }),
@@ -163,8 +253,15 @@ export function createChatbotModule(config, auth, serviceStore, queueStore) {
 
       const [services, queues] = await Promise.all([serviceStore.all(), queueStore.read()]);
       const estimates = await buildEstimates(config, services, queues, request.user.id);
-      const aiResult = await callAiApi(config, request.user, message, estimates);
-      const answer = aiResult.answer ?? formatFallbackAnswer(message, estimates);
+      const operations = request.user.role === 'admin'
+        ? buildAdminOperations(services, estimates)
+        : null;
+      const aiResult = await callAiApi(config, request.user, message, estimates, operations);
+      const answer = aiResult.answer ?? (
+        request.user.role === 'admin'
+          ? formatAdminFallbackAnswer(message, operations)
+          : formatFallbackAnswer(message, estimates)
+      );
 
       response.json({
         answer,
@@ -174,6 +271,7 @@ export function createChatbotModule(config, auth, serviceStore, queueStore) {
           groundedInLiveQueueData: true,
           readOnly: true,
           apiBased: Boolean(config.aiApiKey && config.aiChatModel),
+          adminOperations: request.user.role === 'admin',
         },
       });
     } catch (error) {
@@ -181,5 +279,5 @@ export function createChatbotModule(config, auth, serviceStore, queueStore) {
     }
   });
 
-  return { router, buildEstimates, formatFallbackAnswer };
+  return { router, buildEstimates, buildAdminOperations, formatFallbackAnswer, formatAdminFallbackAnswer };
 }
