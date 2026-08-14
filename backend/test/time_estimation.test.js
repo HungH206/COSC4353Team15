@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { createApp } from '../src/app.js';
-import { calculateWaitTime } from '../src/modules/time_estimation.js';
+import { calculateWaitTime, calculateSmartWaitTime } from '../src/modules/time_estimation.js';
 
 let server;
 let baseUrl;
@@ -13,12 +13,115 @@ let adminToken;
 let userToken;
 let serviceId;
 
+const mockTables = {
+  services: [],
+  queue: [],
+  queueentry: [],
+  userprofile: [],
+  history: []
+};
+
+//mock database for testing purposes
+function createMockDb() {
+  return {
+    from: (tableName) => {
+      if (!mockTables[tableName]) mockTables[tableName] = [];
+      const filters = [];
+      let sortCol = null;
+      let sortAsc = true;
+      let limitCount = null;
+
+      const builder = {
+        select: () => builder,
+        eq: (col, val) => { filters.push((row) => row[col] === val); return builder; },
+        in: (col, valArray) => { filters.push((row) => valArray.includes(row[col])); return builder; },
+        like: (col, val) => {
+          const regex = new RegExp(val.replace(/%/g, '.*'));
+          filters.push((row) => regex.test(row[col]));
+          return builder;
+        },
+        order: (col, { ascending = true } = {}) => { sortCol = col; sortAsc = ascending; return builder; },
+        limit: (count) => { limitCount = count; return builder; },
+        insert: (data) => {
+          const items = Array.isArray(data) ? data : [data];
+          mockTables[tableName].push(...items);
+          const inserted = Array.isArray(data) ? items : items[0];
+          return {
+            select: () => ({
+              single: async () => ({ data: inserted, error: null }),
+              maybeSingle: async () => ({ data: inserted, error: null })
+            }),
+            then: (resolve) => resolve({ data: inserted, error: null })
+          };
+        },
+        update: (updateData) => {
+          return {
+            eq: (col, val) => {
+              filters.push((row) => row[col] === val);
+              const targetRows = mockTables[tableName].filter((row) => filters.every((f) => f(row)));
+              targetRows.forEach((row) => Object.assign(row, updateData));
+              return {
+                select: () => ({
+                  maybeSingle: async () => ({ data: targetRows[0] || null, error: null }),
+                  single: async () => ({ data: targetRows[0] || null, error: null })
+                }),
+                then: (resolve) => resolve({ data: targetRows, error: null })
+              };
+            }
+          };
+        },
+        delete: () => ({
+          eq: async (col, val) => {
+            mockTables[tableName] = mockTables[tableName].filter((row) => row[col] !== val);
+            return { error: null };
+          }
+        }),
+        maybeSingle: async () => {
+          const filtered = mockTables[tableName].filter((row) => filters.every((f) => f(row)));
+          let result = filtered[0] || null;
+          if (!result && tableName === 'userprofile') result = { name: 'User' };
+          return { data: result, error: null };
+        },
+        single: async () => {
+          const filtered = mockTables[tableName].filter((row) => filters.every((f) => f(row)));
+          let result = filtered[0] || null;
+          if (!result && tableName === 'userprofile') result = { name: 'User' };
+          return { data: result, error: null };
+        },
+        then: (resolve) => {
+          let filtered = mockTables[tableName].filter((row) => filters.every((f) => f(row)));
+          if (sortCol) {
+            filtered.sort((a, b) => {
+              if (a[sortCol] < b[sortCol]) return sortAsc ? -1 : 1;
+              if (a[sortCol] > b[sortCol]) return sortAsc ? 1 : -1;
+              return 0;
+            });
+          }
+          if (limitCount) filtered = filtered.slice(0, limitCount);
+          resolve({ data: filtered, error: null });
+        }
+      };
+
+      return builder;
+    }
+  };
+}
+
+const mockDb = createMockDb();
+
+
+
 before(async () => {
   temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'queuesmart-estimation-'));
 
   const app = await createApp({
     jwtSecret: 'test-secret-that-is-at-least-32-characters',
     tokenTtlSeconds: 3600,
+    supabaseUrl: 'https://fake-project.supabase.co',
+    supabaseKey: 'fake-test-key-12345',
+    useDatabase: true,
+    db: mockDb,
+
     dataFile: path.join(temporaryDirectory, 'users.json'),
     servicesFile: path.join(temporaryDirectory, 'services.json'),
     queuesFile: path.join(temporaryDirectory, 'queues.json'),
@@ -179,4 +282,26 @@ test('requires authentication for wait-time estimates', async () => {
     'invalid-token',
   );
   assert.equal(badToken.status, 401);
+});
+
+
+
+
+//NEW SMART FEATURE TEST
+
+test('smart logic calculates wait time dynamically from history', async () => {
+  // Inject some history for "Smart Test Service"
+  // Let's say the expected duration is 10, but reality is taking much longer (20, 20, 20)
+  mockTables.history.push(
+    { message: 'Served for Smart Test Service', outcome: '20', status: 'served', createdat: '2023-01-01' },
+    { message: 'Served for Smart Test Service', outcome: '20', status: 'served', createdat: '2023-01-02' },
+    { message: 'Served for Smart Test Service', outcome: '20', status: 'served', createdat: '2023-01-03' }
+  );
+
+  // Position 3 = 2 people ahead. 
+  // Fallback would be 2 * 10 = 20. 
+  // Smart Average is 2 * 20 = 40.
+  const smartWait = await calculateSmartWaitTime(mockDb, 'Smart Test Service', 3, 10);
+  
+  assert.equal(smartWait, 40);
 });

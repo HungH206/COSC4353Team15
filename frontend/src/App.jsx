@@ -12,6 +12,7 @@ import UserHistory from './pages/UserHistory.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import AdminServices from './pages/AdminServices.jsx';
 import AdminQueue from './pages/AdminQueue.jsx';
+import AdminReports from './pages/AdminReports.jsx';
 import NotificationPanel from './components/NotificationPanel.jsx';
 import { clearToken, getCurrentUser, loadToken, saveToken } from './api/auth.js';
 import { createService, deleteService, listServices, updateService } from './api/services.js';
@@ -19,6 +20,7 @@ import { getAllQueues, getMyQueues, getQueueCounts, joinQueue, leaveQueue, serve
 import { getWaitTimeEstimate, listWaitTimeEstimates } from './api/timeEstimation.js';
 import { listNotifications, markNotificationRead } from './api/notifications.js';
 import { listHistory } from './api/history.js';
+import { listQueueStatsReport, listUserStatsReport } from './api/reports.js';
 
 const USER_NAV = [
   { id: 'user-dashboard', label: 'Dashboard' },
@@ -32,6 +34,7 @@ const ADMIN_NAV = [
   { id: 'admin-dashboard', label: 'Dashboard' },
   { id: 'admin-services', label: 'Services' },
   { id: 'admin-queue', label: 'Queue Manager' },
+  { id: 'admin-report', label: 'Reports'}
 ];
 
 export default function App() {
@@ -43,6 +46,8 @@ export default function App() {
   const [activeQueue, setActiveQueue] = useState(null);
   const [waitEstimates, setWaitEstimates] = useState({});
   const [history, setHistory] = useState([]);
+  const [userStatsReport, setUserStatsReport] = useState([]);
+  const [queueStatsReport, setQueueStatsReport] = useState([]);
   const [showNotifs, setShowNotifs] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
 
@@ -134,6 +139,20 @@ export default function App() {
     if (!user || user.role === 'admin' || page !== 'user-history') return;
     listHistory()
       .then(setHistory)
+      .catch((error) => pushNotification(error.message, 'warning'));
+  }, [page, user]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin' || page !== 'admin-report') return;
+    listUserStatsReport()
+      .then(setUserStatsReport)
+      .catch((error) => pushNotification(error.message, 'warning'));
+  }, [page, user]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin' || page !== 'admin-report') return;
+    listQueueStatsReport()
+      .then(setQueueStatsReport)
       .catch((error) => pushNotification(error.message, 'warning'));
   }, [page, user]);
 
@@ -270,6 +289,8 @@ export default function App() {
         return <AdminServices services={services} onSaveService={handleSaveService} onDeleteService={handleDeleteService} />;
       case 'admin-queue':
         return <AdminQueue services={services} queues={queues} onServeNext={handleServeNext} />;
+      case 'admin-report':
+        return <AdminReports services={services} queues={queues} userStatsReport={userStatsReport} queueStatsReport={queueStatsReport} />;
       default:
         return null;
     }
