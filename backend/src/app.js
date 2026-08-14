@@ -38,7 +38,6 @@ export async function createApp(config) {
   );
   const timeEstimation = createTimeEstimationModule(auth, services.store, queue.store);
   const chatbot = createChatbotModule(config, auth, services.store, queue.store);
-  const timeEstimation = createTimeEstimationModule(auth, services.store, queue.store, config.db);
 
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok' });
