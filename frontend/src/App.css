@@ -21,6 +21,26 @@
   margin-bottom: 1.5rem;
 }
 
+.sidebar-brand-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.mobile-menu-button {
+  display: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 0.85rem;
+  background: var(--sidebar-accent);
+  color: var(--sidebar-foreground);
+  cursor: pointer;
+}
+
 .brand-logo {
   font-weight: 700;
   color: var(--sidebar-primary);
@@ -1270,16 +1290,67 @@ select {
 
   .sidebar {
     width: 100%;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
     padding: 1rem;
+    border-right: none;
+    border-bottom: 1px solid var(--sidebar-border);
+  }
+
+  .sidebar-brand-top {
+    margin-bottom: 0;
+  }
+
+  .sidebar-brand-group {
+    justify-content: flex-start;
+    width: auto;
+  }
+
+  .mobile-menu-button {
+    display: grid;
+    margin-left: auto;
   }
 
   .sidebar-nav {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
+    display: none;
+    flex: initial;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sidebar-border);
+  }
+
+  .sidebar-open .sidebar-nav {
+    display: grid;
+  }
+
+  .sidebar-link {
+    min-height: 2.75rem;
+    border-color: var(--sidebar-border);
+    background: transparent;
+  }
+
+  .sidebar-link.active {
+    background: var(--sidebar-accent);
+  }
+
+  .sidebar-footer {
+    display: none;
+    margin-top: 1rem;
+    padding-top: 1rem;
+  }
+
+  .sidebar-open .sidebar-footer {
+    display: block;
+  }
+
+  .sidebar-user {
+    margin-bottom: 0.75rem;
+  }
+
+  .sidebar-status {
+    margin-bottom: 0.75rem;
   }
 
   .content-area {

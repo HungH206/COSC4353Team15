@@ -14,6 +14,7 @@ import AdminServices from './pages/AdminServices.jsx';
 import AdminQueue from './pages/AdminQueue.jsx';
 import AdminReports from './pages/AdminReports.jsx';
 import NotificationPanel from './components/NotificationPanel.jsx';
+import { Menu, X } from 'lucide-react';
 import { clearToken, getCurrentUser, loadToken, saveToken } from './api/auth.js';
 import { createService, deleteService, listServices, updateService } from './api/services.js';
 import { getAllQueues, getMyQueues, getQueueCounts, joinQueue, leaveQueue, serveNext } from './api/queue.js';
@@ -49,6 +50,7 @@ export default function App() {
   const [userStatsReport, setUserStatsReport] = useState([]);
   const [queueStatsReport, setQueueStatsReport] = useState([]);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
@@ -87,6 +89,7 @@ export default function App() {
     setQueues({});
     setWaitEstimates({});
     setNotifs([]);
+    setMobileNavOpen(false);
   };
 
   useEffect(() => {
@@ -306,10 +309,21 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileNavOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-brand-top">
-          <div className="brand-logo">QueueSmart</div>
-          <span className={`role-pill role-pill-${user.role}`}>{user.role.toUpperCase()}</span>
+          <div className="sidebar-brand-group">
+            <div className="brand-logo">QueueSmart</div>
+            <span className={`role-pill role-pill-${user.role}`}>{user.role.toUpperCase()}</span>
+          </div>
+          <button
+            type="button"
+            className="mobile-menu-button"
+            onClick={() => setMobileNavOpen((open) => !open)}
+            aria-label={mobileNavOpen ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={mobileNavOpen}
+          >
+            {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
         </div>
 
         <div className="sidebar-nav">
@@ -318,7 +332,10 @@ export default function App() {
               key={item.id}
               type="button"
               className={`sidebar-link ${page === item.id ? 'active' : ''}`}
-              onClick={() => setPage(item.id)}
+              onClick={() => {
+                setPage(item.id);
+                setMobileNavOpen(false);
+              }}
             >
               <span>{item.label}</span>
             </button>
