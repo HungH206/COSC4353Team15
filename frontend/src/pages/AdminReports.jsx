@@ -38,7 +38,7 @@ function formatStatus(isOpen) {
 }
 
 const SERVICE_ACTIVITY_GRID = {
-  gridTemplateColumns: 'minmax(160px, 1.4fr) minmax(180px, 1.6fr) minmax(80px, 0.7fr) minmax(80px, 0.7fr) minmax(130px, 1fr) minmax(105px, 0.8fr) minmax(105px, 0.8fr) minmax(110px, 0.8fr) minmax(95px, 0.7fr) minmax(80px, 0.65fr) minmax(105px, 0.8fr) minmax(110px, 0.85fr) minmax(150px, 1fr)',
+  gridTemplateColumns: 'minmax(160px, 1.4fr) minmax(180px, 1.6fr) minmax(80px, 0.7fr) minmax(80px, 0.7fr) minmax(130px, 1fr) minmax(105px, 0.8fr) minmax(105px, 0.8fr) minmax(110px, 0.8fr) minmax(95px, 0.7fr) minmax(80px, 0.65fr) minmax(105px, 0.8fr) minmax(110px, 0.85fr)',
 };
 
 export default function AdminReports({ services = [], queues = {}, userStatsReport = [], queueStatsReport = [] }) {
@@ -65,7 +65,6 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
       status: formatStatus(report.isOpen ?? service.isOpen),
       createdAt: formatDateTime(report.createdAt ?? service.createdAt),
       expectedDuration: formatMinutes(expectedDuration),
-      currentQueueLength: currentWaiting,
       currentEstimatedWait: formatMinutes(report.currentWaitLoadMinutes ?? currentWaiting * expectedDuration),
       usersWaiting: currentWaiting,
       served: report.served ?? 0,
@@ -99,7 +98,7 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
       ]),
     },
     'service-activity': {
-      headers: ['Service', 'Description', 'Priority', 'Status', 'Created At', 'Expected Duration', 'Current Queue Length', 'Smart Estimated Wait', 'Users Waiting', 'Served', 'Left / Cancelled', 'Total Interactions', 'Last Queue Activity'],
+      headers: ['Service', 'Description', 'Priority', 'Status', 'Created At', 'Expected Duration', 'Smart Estimated Wait', 'Users Waiting', 'Served', 'Left / Cancelled', 'Total Interactions', 'Last Queue Activity'],
       filename: 'service_activity_report.csv',
       rows: serviceActivity.map((s) => [
         s.name,
@@ -108,7 +107,6 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
         s.status,
         s.createdAt,
         s.expectedDuration,
-        s.currentQueueLength,
         s.currentEstimatedWait,
         s.usersWaiting,
         s.served,
@@ -212,7 +210,6 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                     <th>Status</th>
                     <th>Created At</th>
                     <th>Expected Duration</th>
-                    <th>Current Queue Length</th>
                     <th>Smart Estimated Wait</th>
                     <th>Users Waiting</th>
                     <th>Served</th>
@@ -224,7 +221,7 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                 <tbody>
                   {serviceActivity.length === 0 && (
                     <tr>
-                      <td colSpan={13}>No services configured.</td>
+                      <td colSpan={12}>No services configured.</td>
                     </tr>
                   )}
                   {serviceActivity.map((s) => (
@@ -237,7 +234,6 @@ export default function AdminReports({ services = [], queues = {}, userStatsRepo
                       <td style={{ textAlign: 'center' }}>{s.status}</td>
                       <td style={{ textAlign: 'center' }}>{s.createdAt}</td>
                       <td style={{ textAlign: 'center' }}>{s.expectedDuration}</td>
-                      <td style={{ textAlign: 'center' }}>{s.currentQueueLength}</td>
                       <td style={{ textAlign: 'center' }}>{s.currentEstimatedWait}</td>
                       <td style={{ textAlign: 'center' }}>{s.usersWaiting}</td>
                       <td style={{ textAlign: 'center' }}>{s.served}</td>
